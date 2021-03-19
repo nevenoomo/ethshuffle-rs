@@ -16,8 +16,9 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
     for _ in 0..n {
         let (client_stream, client_sock) = listener.accept().await?;
         // TODO convert TcpStream into tokio-serde bincode decoder/encoder
-        // then use `select_all()` to iterate over streams and output to sinks 
-    }  
+        // then use `select_all()` to iterate over streams and output to sinks
+        // NOTE don't forget to set `length_delimited` to use only 4 bytes 
+    } 
     
     Ok(())
 }
