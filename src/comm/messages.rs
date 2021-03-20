@@ -6,14 +6,17 @@ use serde::{Deserialize, Serialize};
 
 /// Generic message types
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum Message {}
+pub enum Message {
+    /// Message for announcing the client its identifier
+    AnnounceId(u32),
+}
 
 /// Message intended to the relaying server. In addition to the general message format
 /// contains the identifier of the receiving party
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct RelayMessage {
-    to_id: u32,
-    msg: Message,
+    pub to_id: u32,
+    pub msg: Message,
 }
 
 impl RelayMessage {

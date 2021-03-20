@@ -1,33 +1,86 @@
+//! # Relay Server
+//! 
+//! Implements a routing server to be used along with the EthShuffle. 
+
+use bincode::{deserialize_from, serialize};
+use bytes::Bytes;
 use clap::{value_t, App, Arg};
-use ethshuffle_rs::messages;
+use ethshuffle_rs::messages::{Message, RelayMessage};
+use futures::{future::join_all, prelude::*, stream::select_all};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::string::ToString;
-use tokio::{net::TcpListener, runtime::Runtime, io::AsyncWriteExt};
-use tokio_serde_bincode::{ReadBincode, WriteBincode};
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tokio::{net::TcpListener, runtime::Runtime};
+use tokio_util::codec::LengthDelimitedCodec;
 
 const DEFAULT_PORT: &str = "9999";
 
 async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
     let listener = TcpListener::bind((ip, p)).await?;
-    let mut clients = HashMap::with_capacity(n as usize);
+    let mut clients_rd = Vec::with_capacity(n as usize);
+    let mut clients_wr = HashMap::with_capacity(n as usize);
 
-    let codec = LengthDelimitedCodec::builder()
+    // Build a `length_delimited` codec: serialized data is prefixed with its length
+    let codec = *LengthDelimitedCodec::builder()
         .big_endian()
         .max_frame_length(4096)
-        .length_field_length(4)
-        .clone();
+        .length_field_length(4);
 
     for i in 0..n {
         // NOTE may use `client_sock` as identifier
         let (client_stream, _client_sock) = listener.accept().await?;
-        // TODO use `select_all()` to iterate over streams and output to sinks
 
-        clients.insert(i, codec.new_framed(client_stream));
+        let (rd, wr) = client_stream.into_split();
+
+        clients_rd.push(codec.new_read(rd));
+        clients_wr.insert(i as u32, codec.new_write(wr));
+    }
+
+    // announce the clients their ids
+    let mut announcements = Vec::with_capacity(n as usize);
+
+    for (&id, client) in clients_wr.iter_mut() {
+        let msg = Message::AnnounceId(id);
+        let r_msg = RelayMessage::new(id, msg);
+        // Can unwrap, the data is safe
+        let serialized = serialize(&r_msg).unwrap();
+        announcements.push(client.send(Bytes::from(serialized)));
+    }
+
+    // Wait until all the clients learn their
+    join_all(announcements).await;
+
+    // Merge all client read streams into one stream
+    let mut rds = select_all(clients_rd.into_iter());
+
+    // Run stream to exhaustion
+    while let Some(item) = rds.try_next().await? {
+        let r_msg: RelayMessage = if let Ok(msg) = deserialize_from(&item[..]) {
+            msg
+        } else {
+            eprintln!("ERROR: incorrect incoming message");
+            continue;
+        };
+
+        let item = item.freeze();
+
+        // We use `id` 0 to refer to broadcasting
+        if r_msg.to_id == 0 {
+            for client in clients_wr.values_mut() {
+                // FIXME This blocks the execution. Should spawn a task here. However, may
+                // try to send different messages into a single stream concurrently, which
+                // might cause collision
+                client.send(item.clone()).await?;
+            }
+        } else if let Some(client) = clients_wr.get_mut(&r_msg.to_id) {
+            // FIXME This blocks the execution. Should spawn a task here.
+            client.send(item).await?;
+        } else {
+            eprintln!("ERROR: reference to unknown client");
+            continue;
+        }
     }
 
     Ok(())

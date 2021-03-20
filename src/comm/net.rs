@@ -33,7 +33,7 @@ impl RelayConnector {
                 "relay address is not supplied",
             ));
         };
-        let mut stream = net::TcpStream::connect(addr)?;
+        let stream = net::TcpStream::connect(addr)?;
 
         Ok(RelayConnector { stream })
     }
@@ -43,11 +43,11 @@ impl Connector for RelayConnector {
     fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
         let r_msg = RelayMessage::new(p.id, m);
 
-        let n = bincode::serialized_size(&m).or_else(|_| {
-            Err(io::Error::new(
+        let n = bincode::serialized_size(&m).map_err(|_| {
+            io::Error::new(
                 io::ErrorKind::InvalidData,
                 "could not serialize the message",
-            ))
+            )
         })?;
 
         if n > u32::MAX as u64 {
@@ -60,12 +60,8 @@ impl Connector for RelayConnector {
         let n = n as u32;
 
         self.stream.write_all(&n.to_be_bytes())?;
-        bincode::serialize_into(&self.stream, &r_msg).or_else(|_| {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "could not send a message",
-            ))
-        })
+        bincode::serialize_into(&self.stream, &r_msg)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "could not send a message"))
     }
 
     fn recv_from(&mut self, _: &Peer) -> io::Result<Message> {
@@ -78,11 +74,11 @@ impl Connector for RelayConnector {
 
         self.stream.read_exact(buf.as_mut_slice())?;
 
-        bincode::deserialize_from(buf.as_slice()).or_else(|_| {
-            Err(io::Error::new(
+        bincode::deserialize_from(buf.as_slice()).map_err(|_| {
+            io::Error::new(
                 io::ErrorKind::InvalidData,
                 "could not deserialize the received a message",
-            ))
+            )
         })
     }
 }
