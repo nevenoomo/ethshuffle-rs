@@ -33,7 +33,7 @@ impl RelayConnector {
                 "relay address is not supplied",
             ));
         };
-        let stream = net::TcpStream::connect(addr)?;
+        let mut stream = net::TcpStream::connect(addr)?;
 
         Ok(RelayConnector { stream })
     }

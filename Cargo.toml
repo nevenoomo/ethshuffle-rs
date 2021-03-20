@@ -8,11 +8,13 @@ edition = "2018"
 # Data Serialization/Deserialization
 serde = { version = "^1.0.124", features = ["derive"] }
 bincode = "^1.3.2"
+tokio-serde-bincode = "0.2.1"
 # Signatures
 ed25519-dalek = "^1.0.1"
 # Async
 tokio = { version = "^1.3.0", features = ["full"] }
 futures = "^0.3.13"
 tokio-stream = { version = "^0.1.4", features = ["net"] }
+tokio-util = { version = "0.6.4", features = ["full"] }
 # CLI
 clap = "^2.33.3"
