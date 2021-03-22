@@ -5,7 +5,7 @@ use web3::{
 use ethabi;
 use std::fs::File;
 
-async fn initRegister(
+async fn init_register(
     raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
@@ -64,7 +64,7 @@ async fn initRegister(
 fn init_register_test() {
     use tokio2::runtime::Runtime;
     let mut rt = Runtime::new().unwrap();
-    rt.block_on(initRegister(
+    rt.block_on(init_register(
         [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09], 
         [43, 196, 149, 112, 204, 192, 80, 43, 42, 51, 165, 57, 129, 237, 236, 212, 191, 136, 95, 237],
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
