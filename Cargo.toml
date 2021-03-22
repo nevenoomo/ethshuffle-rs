@@ -12,8 +12,15 @@ bytes = "^1.0.1"
 # Signatures
 ed25519-dalek = "^1.0.1"
 # Async
-tokio = { version = "^1.3.0", features = ["full"] }
+tokio1 = { package = "tokio", version = "^1.3.0", features = ["full"] }
 futures = "^0.3.13"
 tokio-util = { version = "0.6.4", features = ["full"] }
 # CLI
 clap = "^2.33.3"
+# web3
+web3 = "^0.15.0"
+ethabi = "13.0.0"
+env_logger = "0.8"
+hex-literal = "0.3"
+wasm-bindgen-test = "0.3.19"
+tokio2 = { package = "tokio", version = "0.2.0", features = ["full"] }
