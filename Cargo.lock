@@ -659,6 +659,7 @@ dependencies = [
  "ethkey",
  "futures",
  "hex-literal",
+ "rand 0.7.3",
  "serde",
  "sha3",
  "tokio 0.2.25",

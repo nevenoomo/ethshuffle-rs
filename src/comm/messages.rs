@@ -8,7 +8,7 @@ use ecies_ed25519::{PublicKey};
 /// Generic message types
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Message {
-    /// Message for announcing the client its identifier
+    /// Message for announcing the identifier
     AnnounceId(u16),
     /// Message for announcing ephemeral key
     AnnonceEk {

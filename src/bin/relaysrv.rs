@@ -20,7 +20,7 @@ const DEFAULT_PORT: &str = "9999";
 async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
     let listener = TcpListener::bind((ip, p)).await?;
     let mut clients_rd = Vec::with_capacity(n as usize);
-    let mut clients_wr = HashMap::with_capacity(n as usize);
+    let mut clients_wr_temp = Vec::with_capacity(n as usize);
 
     // Build a `length_delimited` codec: serialized data is prefixed with its length
     let codec = *LengthDelimitedCodec::builder()
@@ -29,28 +29,15 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
         .length_field_length(4);
 
     for i in 0..n {
-        // NOTE may use `client_sock` as identifier
         let (client_stream, _client_sock) = listener.accept().await?;
 
         let (rd, wr) = client_stream.into_split();
 
         clients_rd.push(codec.new_read(rd));
-        clients_wr.insert(i, codec.new_write(wr));
+        clients_wr_temp.push(codec.new_write(wr));
     }
 
-    // announce the clients their ids
-    let mut announcements = Vec::with_capacity(n as usize);
-
-    for (&id, client) in clients_wr.iter_mut() {
-        let msg = Message::AnnounceId(id);
-        let r_msg = RelayMessage::new(id, msg);
-        // Can unwrap, the data is safe
-        let serialized = serialize(&r_msg).unwrap();
-        announcements.push(client.send(Bytes::from(serialized)));
-    }
-
-    // Wait until all the clients learn their
-    join_all(announcements).await;
+    // TODO learn the client ids during the announcement phase
 
     // Merge all client read streams into one stream
     let mut rds = select_all(clients_rd.into_iter());
@@ -74,7 +61,7 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
                 // might cause collision
                 client.send(item.clone()).await?;
             }
-        } else if let Some(client) = clients_wr.get_mut(&r_msg.to_id) {
+        } else if let Some(client) = clients_wr(&r_msg.to_id) {
             // FIXME This blocks the execution. Should spawn a task here.
             client.send(item).await?;
         } else {
