@@ -39,20 +39,20 @@ impl PartialEq for Peer {
 
 impl Peer {
     /// Create a new peer given its *id* and its *Ethereum account number*.
-    pub fn new(id: u16, acc: &AccountNum) -> Peer {
+    pub fn new(id: u16, &acc: &AccountNum) -> Peer {
         Peer {
             id,
-            acc: acc.clone(),
+            acc,
             ek: PublicKey::default(),
         }
     }
 
     /// Create a new peer with the given its *id*, *Ethereum account number*, and *ephemeral public key*.
-    pub fn new_with_ek(id: u16, acc: &AccountNum, ek: &PublicKey) -> Peer {
+    pub fn new_with_ek(id: u16, &acc: &AccountNum, &ek: &PublicKey) -> Peer {
         Peer {
             id,
-            acc: acc.clone(),
-            ek: ek.clone(),
+            acc,
+            ek,
         }
     }
 

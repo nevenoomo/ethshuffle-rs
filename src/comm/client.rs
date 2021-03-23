@@ -6,12 +6,9 @@ use super::messages::Message;
 use super::net::Connector;
 use super::peers::{AccountNum, Peer};
 use ecies_ed25519 as ecies;
-use ethkey;
-use rand;
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::io;
-use std::time::{Duration, Instant};
 
 pub struct Client<C> {
     my_id: u16,

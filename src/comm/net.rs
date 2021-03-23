@@ -18,7 +18,7 @@ pub trait Connector {
     /// Receive message from peer `p`
     fn recv_from(&mut self, p: &Peer) -> io::Result<Message>;
     /// Broadcast a given message to all peers
-    fn broadcast(&mut self, ps: &Vec<Peer>, m: Message) -> io::Result<()>;
+    fn broadcast(&mut self, ps: &[Peer], m: Message) -> io::Result<()>;
 }
 
 /// A connector to use a relay server for communicating with peers.
@@ -107,7 +107,7 @@ impl Connector for RelayConnector {
         self.recv()
     }
 
-    fn broadcast(&mut self, _: &Vec<Peer>, m: Message) -> io::Result<()> {
+    fn broadcast(&mut self, _: &[Peer], m: Message) -> io::Result<()> {
         let broadcast_peer = Peer::broadcast_peer();
         self.send_to(&broadcast_peer, m)
     }
