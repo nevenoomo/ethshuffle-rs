@@ -35,7 +35,7 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
         let (rd, wr) = client_stream.into_split();
 
         clients_rd.push(codec.new_read(rd));
-        clients_wr.insert(i as u32, codec.new_write(wr));
+        clients_wr.insert(i, codec.new_write(wr));
     }
 
     // announce the clients their ids

@@ -41,8 +41,6 @@ impl RelayConnector {
 
 impl Connector for RelayConnector {
     fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
-        let r_msg = RelayMessage::new(p.id, m);
-
         let n = bincode::serialized_size(&m).map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -58,6 +56,8 @@ impl Connector for RelayConnector {
         }
 
         let n = n as u32;
+        
+        let r_msg = RelayMessage::new(p.id, m);
 
         self.stream.write_all(&n.to_be_bytes())?;
         bincode::serialize_into(&self.stream, &r_msg)
