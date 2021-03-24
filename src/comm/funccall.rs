@@ -5,7 +5,6 @@ use web3::{
 use ethabi;
 use ethabi::Token;
 use std::fs::File;
-use web3::contract::tokens::Tokenize;
 use web3::contract::tokens::Tokenizable;
 async fn init_register(
     raw_account: [u8; 20], 
@@ -153,7 +152,6 @@ async fn withdraw(
 }
 
 async fn lookup_balance(
-    raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20],
@@ -171,13 +169,12 @@ async fn lookup_balance(
     let first_claimer = Address::from_slice(&raw_first_claimer);
     // Change state of the contract
     let result = contract.query("lookUpBalance",(first_claimer,index,), None, Options::default(), None);
-    let Mybalance: U256 = result.await?;
-    println!("Balance in contract: {:#x}", Mybalance);
-    Ok(Mybalance)
+    let mybalance: U256 = result.await?;
+    println!("Balance in contract: {:#x}", mybalance);
+    Ok(mybalance)
 }
 
 async fn lookup_noofclaimers(
-    raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20]
@@ -194,9 +191,9 @@ async fn lookup_noofclaimers(
     let first_claimer = Address::from_slice(&raw_first_claimer);
     // Change state of the contract
     let result = contract.query("lookUpNoOfClaimers",(first_claimer,), None, Options::default(), None);
-    let MyNoOfClaimers: U256 = result.await?;
-    println!("NoOfClaimers in contract: {:?}", MyNoOfClaimers);
-    Ok(MyNoOfClaimers)
+    let mynoofclaimers: U256 = result.await?;
+    println!("NoOfClaimers in contract: {:?}", mynoofclaimers);
+    Ok(mynoofclaimers)
 }
 
 async fn transferfunc(
@@ -321,6 +318,8 @@ fn register_test() {
         vec![U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]), U256([0x00_u64,0xFF_u64,0xFF_u64,0xFF_u64])],
     )).unwrap();
 }
+
+#[test]
 fn withdraw_test() {
     use tokio2::runtime::Runtime;
     let mut rt = Runtime::new().unwrap();
