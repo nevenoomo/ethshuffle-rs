@@ -30,12 +30,6 @@ async fn init_register(
     let contract_address = Address::from_slice(&raw_contract_address);
     let contract = Contract::new(web3.eth(), contract_address, abi_json);
     println!("Deployed at: {:?}", contract.address());
-    let mut lo_pubkey = 0_u128;
-    let mut hi_pubkey = 0_u128;
-    for x in (0..16).rev() {
-        lo_pubkey = lo_pubkey << 8 | u128::from(pubkey.byte(x));
-        hi_pubkey = hi_pubkey << 8 | u128::from(pubkey.byte(x+16));
-    }
     println!("msg.value is: {:#x}", amount_deposit);
     // Change state of the contract
     let tx = contract.call_with_confirmations(
@@ -126,12 +120,6 @@ async fn withdraw(
     let contract_address = Address::from_slice(&raw_contract_address);
     let contract = Contract::new(web3.eth(), contract_address, abi_json);
     println!("Deployed at: {:?}", contract.address());
-    let mut lo_amount_withdraw = 0_u128;
-    let mut hi_amount_withdraw = 0_u128;
-    for x in (0..16).rev() {
-        lo_amount_withdraw = lo_amount_withdraw << 8 | u128::from(amount_withdraw.byte(x));
-        hi_amount_withdraw = hi_amount_withdraw << 8 | u128::from(amount_withdraw.byte(x+16));
-    }
     let first_claimer = Address::from_slice(&raw_first_claimer);
     println!("value to be withdrawn is: {:#x}", amount_withdraw);
     // Change state of the contract
