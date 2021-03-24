@@ -89,7 +89,7 @@ impl<C: Connector> Client<C> {
             )
         })?;
 
-        let m = Message::AnnonceEk {
+        let m = Message::AnnounceEk {
             id: self.my_id,
             ek,
             session_id: self.session_id,
@@ -112,7 +112,7 @@ impl<C: Connector> Client<C> {
             // TODO add timeout on waiting
             let m = self.conn.recv()?;
 
-            if let Message::AnnonceEk {
+            if let Message::AnnounceEk {
                 id,
                 ek,
                 session_id,

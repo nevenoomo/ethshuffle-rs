@@ -11,7 +11,7 @@ pub enum Message {
     /// Message for announcing the identifier
     AnnounceId(u16),
     /// Message for announcing ephemeral key
-    AnnonceEk {
+    AnnounceEk {
         id: u16,
         ek: PublicKey,
         session_id: u64,
