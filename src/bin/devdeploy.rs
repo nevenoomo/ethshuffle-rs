@@ -72,3 +72,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     rt.block_on(devdeploy(bin.to_string(), abi.to_string()))?;
     Ok(())
 }
+
+#[test]
+fn deploy_test() {
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(devdeploy(
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.bin".to_string(),
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+    )).unwrap();  
+}
