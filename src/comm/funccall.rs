@@ -14,7 +14,6 @@ async fn init_register(
     hoster_start_timestamp: u128,
     hoster_end_timestamp: u128,
     hoster_ip_addr: u32,
-    pubkey: U256,
     claimer_ip_addr: u32,
     amount_deposit: U256
 ) -> web3::contract::Result<()> {
@@ -37,10 +36,7 @@ async fn init_register(
         (   register_deadline,
             hoster_start_timestamp,
             hoster_end_timestamp,
-            true,
             hoster_ip_addr,
-            pubkey,
-            true,
             claimer_ip_addr,
         ),
         account, 
@@ -58,7 +54,6 @@ async fn follow_register(
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20],
-    pubkey: U256,
     claimer_ip_addr: u32,
     amount_deposit: U256
 ) -> web3::contract::Result<()> {
@@ -74,20 +69,12 @@ async fn follow_register(
     let contract_address = Address::from_slice(&raw_contract_address);
     let contract = Contract::new(web3.eth(), contract_address, abi_json);
     println!("Deployed at: {:?}", contract.address());
-    let mut lo_pubkey = 0_u128;
-    let mut hi_pubkey = 0_u128;
-    for x in (0..16).rev() {
-        lo_pubkey = lo_pubkey << 8 | u128::from(pubkey.byte(x));
-        hi_pubkey = hi_pubkey << 8 | u128::from(pubkey.byte(x+16));
-    }
     let first_claimer = Address::from_slice(&raw_first_claimer);
     println!("msg.value is: {:#x}", amount_deposit);
     // Change state of the contract
     let tx = contract.call_with_confirmations(
         "followRegister", 
         (   first_claimer,
-            pubkey,
-            true,
             claimer_ip_addr,
         ),
         account, 
@@ -192,7 +179,6 @@ async fn transferfunc(
     receivers: Vec<[u8;20]>,
     noofclaimers: u128,
     amount: U256,
-    total_amount_to_firstclaimer: U256,
     v: Vec<u8>,
     r: Vec<U256>,
     s: Vec<U256>,
@@ -224,7 +210,6 @@ async fn transferfunc(
             i_receivers,
             noofclaimers,
             amount,
-            total_amount_to_firstclaimer,
             i_v,
             i_r,
             i_s,
@@ -251,7 +236,6 @@ fn register_test() {
         1816449919_u128,
         1916449919_u128,
         0x7F000002_u32,
-        U256([0xDE_u64,0xAD_u64,0xBE_u64,0xEF_u64]),
         0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
@@ -260,7 +244,6 @@ fn register_test() {
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
         [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
-        U256([0xDE_u64,0xAD_u64,0xBE_u64,0xEF_u64]),
         0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
@@ -290,7 +273,6 @@ fn register_test() {
 
         2_u128,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
-        U256([0x01_u64,0x00_u64,0x00_u64,0x00_u64]),
 
         vec![1_u8, 2_u8],
         vec![U256([0x00_u64,0xFF_u64,0xFF_u64,0xFF_u64]), U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64])],
@@ -311,7 +293,6 @@ fn withdraw_test() {
         1816449919_u128,
         1916449919_u128,
         0x7F000002_u32,
-        U256([0xDE_u64,0xAD_u64,0xBE_u64,0xEF_u64]),
         0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
@@ -320,7 +301,6 @@ fn withdraw_test() {
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
         [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
-        U256([0xDE_u64,0xAD_u64,0xBE_u64,0xEF_u64]),
         0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();

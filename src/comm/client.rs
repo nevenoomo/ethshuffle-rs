@@ -5,10 +5,14 @@
 use super::messages::Message;
 use super::net::Connector;
 use super::peers::{AccountNum, Peer};
+use super::funccall;
 use ecies_ed25519 as ecies;
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::io;
+use web3::types::U256;
+
+pub const DEFAULT_MAX_USERS: usize = 100;
 
 pub struct Client<C> {
     my_id: u16,
@@ -17,6 +21,12 @@ pub struct Client<C> {
     peers: Vec<Peer>,
     dk: ecies::SecretKey,
     sk: ethkey::SecretKey,
+    //amount to be transfered
+    amount: U256,
+    //List of receivers
+    final_list: Message,
+    //No of active clients
+    no_of_claimers: u128,
 }
 
 impl<C: Connector> Client<C> {
@@ -28,6 +38,7 @@ impl<C: Connector> Client<C> {
         mut peer_accounts: Vec<&'a AccountNum>,
         my_account: &'b AccountNum,
         sk: ethkey::SecretKey,
+        amount: U256,
     ) -> Client<C> {
         // We need to derive Peer IDs from the account numbers. We use the ordering between account numbers
         // and assign a given peer an ID equal to the index of its account number in the sorted list
@@ -50,6 +61,7 @@ impl<C: Connector> Client<C> {
         let (dk, ek) = ecies::generate_keypair(&mut rng);
 
         peers[my_id as usize].ek = ek;
+        let len: u128 = peers.len() as u128;
         Client {
             my_id,
             conn,
@@ -57,12 +69,28 @@ impl<C: Connector> Client<C> {
             peers,
             dk,
             sk,
+            amount,
+            final_list: Message::FinalList (String::from("")),
+            no_of_claimers: len,
         }
     }
 
     pub fn run_announcement_phase(&mut self) -> io::Result<()> {
         self.announce_ek()?;
         self.receive_announcements()
+    }
+
+    pub fn trigger_blame_phase(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    pub fn verification_phase(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    pub fn run_commit_phase(&mut self) -> io::Result<()> {
+        self.sign_announce_commitmsg()?;
+        Ok(())
     }
 
     fn announce_ek(&mut self) -> io::Result<()> {
@@ -209,5 +237,50 @@ impl<C: Connector> Client<C> {
         }
 
         Ok(())
+    }
+    
+    fn sign_announce_commitmsg(&mut self) -> io::Result<()> {
+        if let Message::FinalList(receivers) = self.final_list.clone(){
+            let mut hasher = Keccak256::new();
+
+            hasher.update(receivers.as_bytes());
+
+            let hash = hasher.finalize();
+
+            let ethkey::Signature {
+                r: signature_r,
+                s: signature_s,
+                v: signature_v,
+            } = self.sk.sign(hash.as_slice()).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to sign the message: {}", e),
+                )
+            })?;
+
+            let m = Message::CommitMsg {
+                senders: self.sender_addresses_to_string().unwrap(),
+                receivers: receivers.to_string(),
+                no_of_claimers: self.no_of_claimers,
+                amount: self.amount,
+                signature_v,
+                signature_r,
+                signature_s,  
+            };
+
+            self.conn.broadcast(&self.peers, m)?;
+        }
+        Ok(())
+    }
+    
+    fn sender_addresses_to_string(&mut self) -> io::Result<String>{
+        let mut s = String::new();
+        for peer in &self.peers {
+            match std::str::from_utf8(&(peer.acc)) {
+                Ok(v) => s.push_str(v),
+                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+            };            
+        }
+        Ok(s)
     }
 }
