@@ -2,15 +2,14 @@
 //!
 //! Defines the client operation for CoinShuffling
 
+use super::funccall;
 use super::messages::Message;
 use super::net::Connector;
 use super::peers::{AccountNum, Peer};
-use super::funccall;
 use ecies_ed25519 as ecies;
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::io;
-use web3::types::U256;
 
 pub const DEFAULT_MAX_USERS: usize = 100;
 
@@ -18,15 +17,15 @@ pub struct Client<C> {
     my_id: u16,
     conn: C,
     session_id: u64,
+    // all the peers taking part in the protocol
     peers: Vec<Peer>,
     dk: ecies::SecretKey,
     sk: ethkey::SecretKey,
-    //amount to be transfered
-    amount: U256,
-    //List of receivers
-    final_list: Message,
-    //No of active clients
-    no_of_claimers: u128,
+    // amount to be transfered
+    amount: u32,
+    // List of receivers
+    // use move semantics to populate
+    final_list: Vec<AccountNum>,
 }
 
 impl<C: Connector> Client<C> {
@@ -38,7 +37,7 @@ impl<C: Connector> Client<C> {
         mut peer_accounts: Vec<&'a AccountNum>,
         my_account: &'b AccountNum,
         sk: ethkey::SecretKey,
-        amount: U256,
+        amount: u32,
     ) -> Client<C> {
         // We need to derive Peer IDs from the account numbers. We use the ordering between account numbers
         // and assign a given peer an ID equal to the index of its account number in the sorted list
@@ -61,8 +60,9 @@ impl<C: Connector> Client<C> {
         let (dk, ek) = ecies::generate_keypair(&mut rng);
 
         peers[my_id as usize].ek = ek;
-        let len: u128 = peers.len() as u128;
+
         Client {
+            final_list: Vec::with_capacity(peers.len()),
             my_id,
             conn,
             session_id,
@@ -70,8 +70,6 @@ impl<C: Connector> Client<C> {
             dk,
             sk,
             amount,
-            final_list: Message::FinalList (String::from("")),
-            no_of_claimers: len,
         }
     }
 
@@ -89,8 +87,7 @@ impl<C: Connector> Client<C> {
     }
 
     pub fn run_commit_phase(&mut self) -> io::Result<()> {
-        self.sign_announce_commitmsg()?;
-        Ok(())
+        self.sign_announce_commitmsg()
     }
 
     fn announce_ek(&mut self) -> io::Result<()> {
@@ -225,8 +222,8 @@ impl<C: Connector> Client<C> {
                     _ => (),
                 }
 
-                // we have already received a key for this id
-                if ids_announced.insert(id) {
+                // we have already received a different key for this id
+                if !ids_announced.insert(id) && self.peers[id as usize].ek != ek {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("key already received from {:x?}", derived_acc),
@@ -238,49 +235,39 @@ impl<C: Connector> Client<C> {
 
         Ok(())
     }
-    
     fn sign_announce_commitmsg(&mut self) -> io::Result<()> {
-        if let Message::FinalList(receivers) = self.final_list.clone(){
-            let mut hasher = Keccak256::new();
+        let mut hasher = Keccak256::new();
+        let receivers = self.final_list.clone();
 
-            hasher.update(receivers.as_bytes());
-
-            let hash = hasher.finalize();
-
-            let ethkey::Signature {
-                r: signature_r,
-                s: signature_s,
-                v: signature_v,
-            } = self.sk.sign(hash.as_slice()).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("failed to sign the message: {}", e),
-                )
-            })?;
-
-            let m = Message::CommitMsg {
-                senders: self.sender_addresses_to_string().unwrap(),
-                receivers: receivers.to_string(),
-                no_of_claimers: self.no_of_claimers,
-                amount: self.amount,
-                signature_v,
-                signature_r,
-                signature_s,  
-            };
-
-            self.conn.broadcast(&self.peers, m)?;
+        for receiver in receivers.iter() {
+            hasher.update(receiver);
         }
-        Ok(())
-    }
-    
-    fn sender_addresses_to_string(&mut self) -> io::Result<String>{
-        let mut s = String::new();
-        for peer in &self.peers {
-            match std::str::from_utf8(&(peer.acc)) {
-                Ok(v) => s.push_str(v),
-                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
-            };            
-        }
-        Ok(s)
+
+        let hash = hasher.finalize();
+
+        let ethkey::Signature {
+            r: signature_r,
+            s: signature_s,
+            v: signature_v,
+        } = self.sk.sign(hash.as_slice()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to sign the message: {}", e),
+            )
+        })?;
+
+        let senders = self.peers.iter().map(|p| p.acc.clone()).collect();
+
+        let m = Message::CommitMsg {
+            senders,
+            receivers,
+            no_of_claimers: self.peers.len() as u16,
+            amount: self.amount,
+            signature_v,
+            signature_r,
+            signature_s,
+        };
+
+        self.conn.broadcast(&self.peers, m)
     }
 }
