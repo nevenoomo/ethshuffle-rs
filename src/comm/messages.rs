@@ -20,6 +20,15 @@ pub enum Message {
         signature_r: [u8; 32],
         signature_s: [u8; 32],
     },
+    /// Message for passing encrypted permutation of output addresses to the next peer
+    Permutation {
+        id: u16,
+        perm: Vec<AccountNum>,
+        session_id: u64,
+        signature_v: u8,
+        signature_r: [u8; 32],
+        signature_s: [u8; 32],
+    },
     /// Final list of receiver addresses
     FinalList(Vec<AccountNum>),
     /// Intermediate Message for commit phase

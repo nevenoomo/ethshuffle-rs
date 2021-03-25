@@ -73,9 +73,23 @@ impl<C: Connector> Client<C> {
         }
     }
 
+    /// Announce the per-session ephemeral encryption key to all protocol participants. 
     pub fn run_announcement_phase(&mut self) -> io::Result<()> {
         self.announce_ek()?;
         self.receive_announcements()
+    }
+
+    /// Run the shuffling phase using `my_rcv` account address as the desired output.
+    pub fn run_shuffle_phase(&mut self, my_rcv: &AccountNum) -> io::Result<()> {
+        let prev_permutation: Vec<AccountNum> = if self.my_id == 0 {
+            // the first peer does not receive any permutation
+            Vec::new()
+        } else {
+            // TODO receive the permutation from peer my_id - 1 and strip last level of encryption
+            unimplemented!("");
+        };
+
+        Ok(())
     }
 
     pub fn trigger_blame_phase(&mut self) -> io::Result<()> {
