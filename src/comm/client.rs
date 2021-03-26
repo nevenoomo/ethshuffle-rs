@@ -14,6 +14,15 @@ use std::io;
 
 pub const DEFAULT_MAX_USERS: usize = 100;
 
+pub struct CommitmsgPrepare {
+    //List of receivers
+    final_list: Vec<AccountNum>,
+    //Signitures for each pair same order as peers
+    signatures_v: Vec<u8>,
+    signatures_r: Vec<[u8; 32]>,
+    signatures_s: Vec<[u8; 32]>,
+}
+
 pub struct Client<C> {
     my_id: u16,
     conn: C,
@@ -22,11 +31,10 @@ pub struct Client<C> {
     peers: Vec<Peer>,
     dk: ecies::SecretKey,
     sk: ethkey::SecretKey,
-    // amount to be transfered
+    //amount to be transfered
     amount: u32,
-    // List of receivers
-    // use move semantics to populate
-    final_list: Vec<AccountNum>,
+    //commit message to be committed to the chain
+    commitmsg: CommitmsgPrepare,
 }
 
 impl<C: Connector> Client<C> {
@@ -63,7 +71,6 @@ impl<C: Connector> Client<C> {
         peers[my_id as usize].ek = ek;
 
         Client {
-            final_list: Vec::with_capacity(peers.len()),
             my_id,
             conn,
             session_id,
@@ -71,6 +78,12 @@ impl<C: Connector> Client<C> {
             dk,
             sk,
             amount,
+            commitmsg: CommitmsgPrepare{
+                        final_list: vec![],
+                        signatures_v: vec![],
+                        signatures_r: vec![],
+                        signatures_s: vec![],
+                        }
         }
     }
 
@@ -135,7 +148,11 @@ impl<C: Connector> Client<C> {
     }
 
     pub fn run_commit_phase(&mut self) -> io::Result<()> {
-        self.sign_announce_commitmsg()
+        self.commitmsg.signatures_v = vec![0_u8;self.peers.len()];
+        self.commitmsg.signatures_r = vec![[0_u8;32];self.peers.len()];
+        self.commitmsg.signatures_s = vec![[0_u8;32];self.peers.len()];
+        self.sign_announce_commitmsg()?;
+        Ok(())
     }
 
     fn announce_ek(&mut self) -> io::Result<()> {
@@ -273,12 +290,18 @@ impl<C: Connector> Client<C> {
     }
     fn sign_announce_commitmsg(&mut self) -> io::Result<()> {
         let mut hasher = Keccak256::new();
-        let receivers = self.final_list.clone();
-
-        for receiver in receivers.iter() {
-            hasher.update(receiver);
+        let senders: Vec<AccountNum> = self.peers.iter().map(|p| p.acc.clone()).collect();
+        let receivers = self.commitmsg.final_list.clone();
+        let no_of_claimers = self.peers.len() as u16;
+        hasher.update(self.my_id.to_le_bytes());
+        for i in &senders {
+            hasher.update(i);
         }
-
+        for i in &receivers {
+            hasher.update(i);
+        }
+        hasher.update(no_of_claimers.to_le_bytes());
+        hasher.update(self.amount.to_le_bytes());
         let hash = hasher.finalize();
 
         let ethkey::Signature {
@@ -292,12 +315,15 @@ impl<C: Connector> Client<C> {
             )
         })?;
 
-        let senders = self.peers.iter().map(|p| p.acc.clone()).collect();
+        self.commitmsg.signatures_v[self.my_id as usize] = signature_v;
+        self.commitmsg.signatures_r[self.my_id as usize] = signature_r;
+        self.commitmsg.signatures_s[self.my_id as usize] = signature_s;
 
         let m = Message::CommitMsg {
+            id: self.my_id,
             senders,
             receivers,
-            no_of_claimers: self.peers.len() as u16,
+            no_of_claimers,
             amount: self.amount,
             signature_v,
             signature_r,
@@ -305,5 +331,99 @@ impl<C: Connector> Client<C> {
         };
 
         self.conn.broadcast(&self.peers, m)
+    }
+
+    fn receive_commitmsg(&mut self) -> io::Result<()> {
+        let n = self.peers.len();
+        let mut valid_insert_times = 0;
+        while valid_insert_times < n {
+            // TODO add timeout on waiting
+            let m = self.conn.recv()?;
+
+            if let Message::CommitMsg {
+                id,
+                senders,
+                receivers,
+                no_of_claimers,
+                amount,
+                signature_v,
+                signature_r,
+                signature_s,  
+            } = m
+            {
+                self.check_id(id)?;
+
+                let signature = ethkey::Signature {
+                    r: signature_r,
+                    s: signature_s,
+                    v: signature_v,
+                };
+
+                let mut hasher = Keccak256::new();
+
+                hasher.update(id.to_le_bytes());
+                for i in &senders {
+                    hasher.update(i);
+                }
+                for i in &receivers {
+                    hasher.update(i);
+                }
+                hasher.update(no_of_claimers.to_le_bytes());
+                hasher.update(amount.to_le_bytes());
+
+                let hashed_msg = hasher.finalize();
+                // recover the signer
+                let vk = self.recover_pub_key(&hashed_msg, &signature)?;
+
+                let derived_acc = vk.address();
+                let peer_acc = self.peers[id as usize].acc;
+
+                // the signer is not the one with the given id
+                if *derived_acc != peer_acc {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("impersonalisation attempt by {:x?}", derived_acc),
+                    ));
+                }
+
+                // verify the signature
+                match vk.verify(&signature, hashed_msg.as_slice()) {
+                    Ok(valid) if !valid => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "signature is invalid\nBlame account number: {:x?}",
+                                derived_acc
+                            ),
+                        ))
+                    }
+                    Err(e) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "signature validation failed: {}\nBlame account number: {:x?}",
+                                e, derived_acc
+                            ),
+                        ))
+                    }
+                    _ => (),
+                }
+
+                // we have already received a different key for this id
+                if (self.commitmsg.signatures_v[id as usize] != 0_u8) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("key already received from {:x?}", derived_acc),
+                    ));
+                } else {
+                    self.commitmsg.signatures_v[id as usize] = signature_v;
+                    self.commitmsg.signatures_r[id as usize] = signature_r;
+                    self.commitmsg.signatures_s[id as usize] = signature_s;
+                    valid_insert_times+=1;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

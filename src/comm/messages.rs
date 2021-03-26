@@ -33,6 +33,7 @@ pub enum Message {
     FinalList(Vec<AccountNum>),
     /// Intermediate Message for commit phase
     CommitMsg {
+        id: u16,
         senders: Vec<AccountNum>,
         receivers: Vec<AccountNum>,
         no_of_claimers: u16,
