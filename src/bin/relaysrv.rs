@@ -173,6 +173,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .short("n")
                 .required(true)
                 .takes_value(true)
+                .value_name("#PARTICIPANTS")
                 .validator(|x| match x.parse::<u16>() {
                     Ok(_) => Ok(()),
                     Err(_) => Err(String::from("Incorrect number of participants")),
