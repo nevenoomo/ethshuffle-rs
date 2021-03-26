@@ -6,7 +6,7 @@ use super::errors;
 use super::funccall;
 use super::messages::Message;
 use super::net::Connector;
-use super::peers::{AccountNum, Peer};
+use super::peers::{AccountNum, AccountNumEnc, Peer};
 use ecies_ed25519 as ecies;
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
@@ -78,12 +78,12 @@ impl<C: Connector> Client<C> {
             dk,
             sk,
             amount,
-            commitmsg: CommitmsgPrepare{
-                        final_list: vec![],
-                        signatures_v: vec![],
-                        signatures_r: vec![],
-                        signatures_s: vec![],
-                        }
+            commitmsg: CommitmsgPrepare {
+                final_list: vec![],
+                signatures_v: vec![],
+                signatures_r: vec![],
+                signatures_s: vec![],
+            },
         }
     }
 
@@ -95,18 +95,15 @@ impl<C: Connector> Client<C> {
 
     /// Run the shuffling phase using `my_rcv` account address as the desired output.
     pub fn run_shuffle_phase(&mut self, my_rcv: &AccountNum) -> io::Result<()> {
-        let prev_permutation: Vec<AccountNum> = if self.my_id == 0 {
+        let prev_permutation: Vec<AccountNumEnc> = if self.my_id == 0 {
             // the first peer does not receive any permutation
             Vec::new()
         } else {
-            // TODO receive the permutation from peer my_id - 1 and strip last level of encryption
-            unimplemented!("");
-
             let prev_peer = &self.peers[self.my_id as usize - 1];
             // TODO may need to trigger blame phase here
             let m = self.conn.recv_from(&prev_peer)?;
 
-            let list = if let Message::Permutation {
+            if let Message::Permutation {
                 id,
                 perm,
                 session_id,
@@ -115,6 +112,10 @@ impl<C: Connector> Client<C> {
                 signature_s,
             } = m
             {
+                if id != prev_peer.id {
+                    return Err(errors::unexpected_peer_id(id));
+                }
+
                 let signature = ethkey::Signature {
                     v: signature_v,
                     r: signature_r,
@@ -128,13 +129,46 @@ impl<C: Connector> Client<C> {
                 hasher.update(session_id.to_le_bytes());
 
                 let msg_hash = hasher.finalize();
+
+                // FIXME Repetitive code
+                let vk = self.recover_pub_key(&msg_hash, &signature)?;
+
+                let derived_acc = vk.address();
+                let peer_acc = self.peers[id as usize].acc;
+
+                // check the session id
+                if self.session_id != session_id {
+                    return Err(errors::incorrect_session_number(session_id, derived_acc));
+                }
+
+                // the signer is not the one with the given id
+                if *derived_acc != peer_acc {
+                    return Err(errors::impersonalisation(derived_acc));
+                }
+
+                // verify the signature
+                match vk.verify(&signature, msg_hash.as_slice()) {
+                    Ok(valid) if !valid => {
+                        return Err(errors::signature_invalid(derived_acc));
+                    }
+                    Err(e) => return Err(errors::could_not_verify_signature(e, derived_acc)),
+                    _ => (),
+                }
+                perm
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "expected permutation message",
                 ));
-            };
+            }
         };
+
+        // strip the last encryption layer
+        let decrypted: Vec<AccountNumEnc> = prev_permutation
+            .into_iter()
+            .map(|acc| ecies::decrypt(&self.dk, &acc))
+            .collect::<Result<Vec<AccountNumEnc>, ecies::Error>>()
+            .map_err(|e| errors::decryption_failure(e))?;
 
         Ok(())
     }
@@ -148,9 +182,9 @@ impl<C: Connector> Client<C> {
     }
 
     pub fn run_commit_phase(&mut self) -> io::Result<()> {
-        self.commitmsg.signatures_v = vec![0_u8;self.peers.len()];
-        self.commitmsg.signatures_r = vec![[0_u8;32];self.peers.len()];
-        self.commitmsg.signatures_s = vec![[0_u8;32];self.peers.len()];
+        self.commitmsg.signatures_v = vec![0_u8; self.peers.len()];
+        self.commitmsg.signatures_r = vec![[0_u8; 32]; self.peers.len()];
+        self.commitmsg.signatures_s = vec![[0_u8; 32]; self.peers.len()];
         self.sign_announce_commitmsg()?;
         Ok(())
     }
@@ -191,18 +225,6 @@ impl<C: Connector> Client<C> {
         self.conn.broadcast(&self.peers, m)
     }
 
-    fn check_id(&self, id: u16) -> io::Result<()> {
-        // check whether we know this id
-        if id as usize >= self.peers.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("peer with id {} is unknown", id),
-            ));
-        }
-
-        Ok(())
-    }
-
     fn recover_pub_key<U: generic_array::ArrayLength<u8>>(
         &self,
         hashed_msg: &generic_array::GenericArray<u8, U>,
@@ -236,7 +258,10 @@ impl<C: Connector> Client<C> {
                 signature_v,
             } = m
             {
-                self.check_id(id)?;
+                // check whether we know this id
+                if id as usize >= self.peers.len() {
+                    return Err(errors::unexpected_peer_id(id));
+                }
 
                 let signature = ethkey::Signature {
                     r: signature_r,
@@ -348,10 +373,13 @@ impl<C: Connector> Client<C> {
                 amount,
                 signature_v,
                 signature_r,
-                signature_s,  
+                signature_s,
             } = m
             {
-                self.check_id(id)?;
+                // check whether we know this id
+                if id as usize >= self.peers.len() {
+                    return Err(errors::unexpected_peer_id(id));
+                }
 
                 let signature = ethkey::Signature {
                     r: signature_r,
@@ -419,7 +447,7 @@ impl<C: Connector> Client<C> {
                     self.commitmsg.signatures_v[id as usize] = signature_v;
                     self.commitmsg.signatures_r[id as usize] = signature_r;
                     self.commitmsg.signatures_s[id as usize] = signature_s;
-                    valid_insert_times+=1;
+                    valid_insert_times += 1;
                 }
             }
         }

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use ecies_ed25519::{PublicKey};
-use super::peers::AccountNum;
+use super::peers::{AccountNum, AccountNumEnc};
 
 /// Generic message types
 #[derive(Clone, Serialize, Deserialize)]
@@ -23,7 +23,7 @@ pub enum Message {
     /// Message for passing encrypted permutation of output addresses to the next peer
     Permutation {
         id: u16,
-        perm: Vec<AccountNum>,
+        perm: Vec<AccountNumEnc>,
         session_id: u64,
         signature_v: u8,
         signature_r: [u8; 32],

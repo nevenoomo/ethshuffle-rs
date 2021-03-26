@@ -7,6 +7,8 @@ use std::cmp::Ordering;
 
 /// Ethereum account number
 pub type AccountNum = [u8; 20];
+/// Encrypted Ethereum account. Notice, that the length might be different from the `AccountNum`
+pub type AccountNumEnc = Vec<u8>;
 
 /// Represents a single shuffling participant
 #[derive(Default, Clone, Eq)]

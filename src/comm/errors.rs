@@ -51,3 +51,17 @@ pub(crate) fn equivocation_attempt(blame_acc: &AccountNum) -> Error {
         format!("equivocation attempt by {:x?}", blame_acc),
     )
 }
+
+pub(crate) fn unexpected_peer_id(id: u16) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("received message from unexpected peer with id = {}", id),
+    )
+}
+
+pub(crate) fn decryption_failure<E: std::fmt::Display>(due_error: E) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("failed to decrypt: {}", due_error),
+    )
+}
