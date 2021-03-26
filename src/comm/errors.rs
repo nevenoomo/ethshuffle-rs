@@ -65,3 +65,10 @@ pub(crate) fn decryption_failure<E: std::fmt::Display>(due_error: E) -> Error {
         format!("failed to decrypt: {}", due_error),
     )
 }
+
+pub(crate) fn encryption_failure<E: std::fmt::Display>(due_error: E) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("failed to encrypt: {}", due_error),
+    )
+}

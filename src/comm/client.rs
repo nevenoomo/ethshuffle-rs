@@ -8,6 +8,7 @@ use super::messages::Message;
 use super::net::Connector;
 use super::peers::{AccountNum, AccountNumEnc, Peer};
 use ecies_ed25519 as ecies;
+use rand::{self, seq::SliceRandom};
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::io;
@@ -164,11 +165,37 @@ impl<C: Connector> Client<C> {
         };
 
         // strip the last encryption layer
-        let decrypted: Vec<AccountNumEnc> = prev_permutation
+        // TODO trigger blame phase on failed decryption
+        let mut permutation: Vec<AccountNumEnc> = prev_permutation
             .into_iter()
             .map(|acc| ecies::decrypt(&self.dk, &acc))
             .collect::<Result<Vec<AccountNumEnc>, ecies::Error>>()
             .map_err(|e| errors::decryption_failure(e))?;
+
+        let mut rng = rand::thread_rng();
+
+        // note that by using skip, we make sure the last peer does not actually encrypts its output
+        let my_output = self
+            .peers
+            .iter()
+            .skip(self.my_id as usize + 1)
+            .map(|p| p.ek)
+            .rev()
+            .try_fold(Vec::from(my_rcv.clone()), |accum, ek| {
+                ecies::encrypt(&ek, &accum[..], &mut rng)
+            })
+            .map_err(|e| errors::encryption_failure(e))?;
+
+        permutation.push(my_output);
+
+        permutation.shuffle(&mut rng);
+
+        // if I am not the last peer
+        if (self.my_id as usize) < self.peers.len() - 1 {
+            // TODO send to the next peer
+        } else {
+            // TODO create and output transaction 
+        }
 
         Ok(())
     }
