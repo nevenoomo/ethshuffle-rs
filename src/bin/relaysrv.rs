@@ -5,6 +5,7 @@
 use bincode::deserialize_from;
 use clap::{value_t, App, Arg};
 use ethshuffle_rs::messages::{Message, RelayMessage};
+use ethshuffle_rs::DEFAULT_PORT;
 use futures::{prelude::*, stream::select_all};
 use std::collections::HashMap;
 use std::error::Error;
@@ -14,8 +15,6 @@ use std::net::IpAddr;
 use std::str::FromStr;
 use tokio1::{net::TcpListener, runtime::Runtime};
 use tokio_util::codec::LengthDelimitedCodec;
-
-const DEFAULT_PORT: &str = "9999";
 
 async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
     let listener = TcpListener::bind((ip, p)).await?;
@@ -145,7 +144,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .short("a")
                 .takes_value(true)
                 .value_name("IP_ADDR")
-                .required(true)
+                .required(false)
                 .default_value("0.0.0.0")
                 .validator(|x| match IpAddr::from_str(x.as_str()) {
                     Ok(_) => Ok(()),
@@ -157,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .help("binding port")
                 .long("port")
                 .short("p")
-                .required(true)
+                .required(false)
                 .takes_value(true)
                 .value_name("PORT")
                 .default_value(DEFAULT_PORT)
