@@ -2,6 +2,7 @@
 //!
 //! Defines the client operation for CoinShuffling
 
+use super::errors;
 use super::funccall;
 use super::messages::Message;
 use super::net::Connector;
@@ -73,7 +74,7 @@ impl<C: Connector> Client<C> {
         }
     }
 
-    /// Announce the per-session ephemeral encryption key to all protocol participants. 
+    /// Announce the per-session ephemeral encryption key to all protocol participants.
     pub fn run_announcement_phase(&mut self) -> io::Result<()> {
         self.announce_ek()?;
         self.receive_announcements()
@@ -87,6 +88,39 @@ impl<C: Connector> Client<C> {
         } else {
             // TODO receive the permutation from peer my_id - 1 and strip last level of encryption
             unimplemented!("");
+
+            let prev_peer = &self.peers[self.my_id as usize - 1];
+            // TODO may need to trigger blame phase here
+            let m = self.conn.recv_from(&prev_peer)?;
+
+            let list = if let Message::Permutation {
+                id,
+                perm,
+                session_id,
+                signature_v,
+                signature_r,
+                signature_s,
+            } = m
+            {
+                let signature = ethkey::Signature {
+                    v: signature_v,
+                    r: signature_r,
+                    s: signature_s,
+                };
+
+                let mut hasher = Keccak256::new();
+
+                perm.iter().for_each(|b| hasher.update(b));
+                hasher.update(&[2u8]);
+                hasher.update(session_id.to_le_bytes());
+
+                let msg_hash = hasher.finalize();
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "expected permutation message",
+                ));
+            };
         };
 
         Ok(())
@@ -140,6 +174,31 @@ impl<C: Connector> Client<C> {
         self.conn.broadcast(&self.peers, m)
     }
 
+    fn check_id(&self, id: u16) -> io::Result<()> {
+        // check whether we know this id
+        if id as usize >= self.peers.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("peer with id {} is unknown", id),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn recover_pub_key<U: generic_array::ArrayLength<u8>>(
+        &self,
+        hashed_msg: &generic_array::GenericArray<u8, U>,
+        signature: &ethkey::Signature,
+    ) -> io::Result<ethkey::PublicKey> {
+        signature.recover(hashed_msg.as_slice()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("could not reconstruct the verification key of peer: {}", e),
+            )
+        })
+    }
+
     fn receive_announcements(&mut self) -> io::Result<()> {
         let n = self.peers.len();
         // we will be storing ids of peers, which already announced their encryption keys
@@ -160,13 +219,7 @@ impl<C: Connector> Client<C> {
                 signature_v,
             } = m
             {
-                // check whether we know this id
-                if id as usize >= self.peers.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("peer with id {} is unknown", id),
-                    ));
-                }
+                self.check_id(id)?;
 
                 let signature = ethkey::Signature {
                     r: signature_r,
@@ -184,64 +237,33 @@ impl<C: Connector> Client<C> {
 
                 let hashed_msg = hasher.finalize();
                 // recover the signer
-                let vk = signature.recover(hashed_msg.as_slice()).map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("could not reconstruct the verification key of peer: {}", e),
-                    )
-                })?;
+                let vk = self.recover_pub_key(&hashed_msg, &signature)?;
 
                 let derived_acc = vk.address();
                 let peer_acc = self.peers[id as usize].acc;
 
                 // check the session id
                 if self.session_id != session_id {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "peer used incorrect session number {}\nBlame account number: {:x?}",
-                            session_id, derived_acc
-                        ),
-                    ));
+                    return Err(errors::incorrect_session_number(session_id, derived_acc));
                 }
 
                 // the signer is not the one with the given id
                 if *derived_acc != peer_acc {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("impersonalisation attempt by {:x?}", derived_acc),
-                    ));
+                    return Err(errors::impersonalisation(derived_acc));
                 }
 
                 // verify the signature
                 match vk.verify(&signature, hashed_msg.as_slice()) {
                     Ok(valid) if !valid => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "signature is invalid\nBlame account number: {:x?}",
-                                derived_acc
-                            ),
-                        ))
+                        return Err(errors::signature_invalid(derived_acc));
                     }
-                    Err(e) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "signature validation failed: {}\nBlame account number: {:x?}",
-                                e, derived_acc
-                            ),
-                        ))
-                    }
+                    Err(e) => return Err(errors::could_not_verify_signature(e, derived_acc)),
                     _ => (),
                 }
 
                 // we have already received a different key for this id
                 if !ids_announced.insert(id) && self.peers[id as usize].ek != ek {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("key already received from {:x?}", derived_acc),
-                    ));
+                    return Err(errors::equivocation_attempt(derived_acc));
                 }
                 self.peers[id as usize].ek = ek;
             }
