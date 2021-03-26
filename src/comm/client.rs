@@ -164,13 +164,13 @@ impl<C: Connector> Client<C> {
             }
         };
 
-        // strip the last encryption layer
+        // strip the last encryption layer. note that for the first peer this will be an empty vector
         // TODO trigger blame phase on failed decryption
         let mut permutation: Vec<AccountNumEnc> = prev_permutation
             .into_iter()
             .map(|acc| ecies::decrypt(&self.dk, &acc))
             .collect::<Result<Vec<AccountNumEnc>, ecies::Error>>()
-            .map_err(|e| errors::decryption_failure(e))?;
+            .map_err(errors::decryption_failure)?;
 
         let mut rng = rand::thread_rng();
 
@@ -181,10 +181,10 @@ impl<C: Connector> Client<C> {
             .skip(self.my_id as usize + 1)
             .map(|p| p.ek)
             .rev()
-            .try_fold(Vec::from(my_rcv.clone()), |accum, ek| {
+            .try_fold(Vec::from(*my_rcv), |accum, ek| {
                 ecies::encrypt(&ek, &accum[..], &mut rng)
             })
-            .map_err(|e| errors::encryption_failure(e))?;
+            .map_err(errors::encryption_failure)?;
 
         permutation.push(my_output);
 
@@ -192,9 +192,36 @@ impl<C: Connector> Client<C> {
 
         // if I am not the last peer
         if (self.my_id as usize) < self.peers.len() - 1 {
-            // TODO send to the next peer
+            let next_peer = &self.peers[self.my_id as usize + 1];
+
+            let mut hasher = Keccak256::new();
+
+            permutation.iter().for_each(|x| hasher.update(x));
+            hasher.update(&[2u8]);
+            hasher.update(self.session_id.to_le_bytes());
+
+            let msg_hash = hasher.finalize();
+            let ethkey::Signature {
+                r: signature_r,
+                s: signature_s,
+                v: signature_v,
+            } = self
+                .sk
+                .sign(msg_hash.as_slice())
+                .map_err(errors::could_not_sign)?;
+
+            let m = Message::Permutation {
+                id: self.my_id,
+                perm: permutation,
+                session_id: self.session_id,
+                signature_v,
+                signature_r,
+                signature_s,
+            };
+
+            self.conn.send_to(&next_peer, m)?;
         } else {
-            // TODO create and output transaction 
+            // TODO create and output transaction
         }
 
         Ok(())
@@ -233,12 +260,10 @@ impl<C: Connector> Client<C> {
             r: signature_r,
             s: signature_s,
             v: signature_v,
-        } = self.sk.sign(hash.as_slice()).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("failed to sign the message: {}", e),
-            )
-        })?;
+        } = self
+            .sk
+            .sign(hash.as_slice())
+            .map_err(errors::could_not_sign)?;
 
         let m = Message::AnnounceEk {
             id: self.my_id,
@@ -342,7 +367,7 @@ impl<C: Connector> Client<C> {
     }
     fn sign_announce_commitmsg(&mut self) -> io::Result<()> {
         let mut hasher = Keccak256::new();
-        let senders: Vec<AccountNum> = self.peers.iter().map(|p| p.acc.clone()).collect();
+        let senders: Vec<AccountNum> = self.peers.iter().map(|p| p.acc).collect();
         let receivers = self.commitmsg.final_list.clone();
         let no_of_claimers = self.peers.len() as u16;
         hasher.update(self.my_id.to_le_bytes());

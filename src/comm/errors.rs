@@ -32,6 +32,13 @@ pub(crate) fn signature_invalid(blame_acc: &AccountNum) -> Error {
     )
 }
 
+pub(crate) fn could_not_sign<E: std::fmt::Display>(due_error: E) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("failed to sign the message: {}", due_error),
+    )
+}
+
 pub(crate) fn could_not_verify_signature<E: std::fmt::Display>(
     due_error: E,
     blame_acc: &AccountNum,
