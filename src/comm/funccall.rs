@@ -6,7 +6,34 @@ use ethabi;
 use ethabi::Token;
 use std::fs::File;
 use web3::contract::tokens::Tokenizable;
-async fn init_register(
+use std::fs;
+use std::time;
+
+pub async fn devdeploy(raw_account: [u8; 20], bin: String, abi: String) -> web3::contract::Result<()> {
+    let _ = env_logger::try_init();
+    let transport = web3::transports::Http::new("http://localhost:8545")?;
+    let web3 = web3::Web3::new(transport);
+    // Get current balance
+    let account = Address::from_slice(&raw_account);
+    let balance = web3.eth().balance(account, None).await?;
+    println!("Balance: {}", balance);
+
+    // Get the contract bytecode for instance from Solidity compiler
+    let bytecode = fs::read_to_string(bin).unwrap();
+    let abicontentstr = fs::read_to_string(abi).unwrap();
+    let abicontent = abicontentstr.as_bytes();
+    // Deploying a contract
+    let contract = Contract::deploy(web3.eth(), abicontent)?
+        .confirmations(1)
+        .poll_interval(time::Duration::from_secs(10))
+        .options(Options::with(|opt| opt.gas = Some(3_000_000.into())))
+        .execute(bytecode, (), account)
+        .await?;
+    println!("Deployed at: {:?}", contract.address().as_bytes());
+    Ok(())
+}
+
+pub async fn init_register(
     raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
@@ -49,7 +76,7 @@ async fn init_register(
     Ok(())
 }
 
-async fn follow_register(
+pub async fn follow_register(
     raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
@@ -87,7 +114,7 @@ async fn follow_register(
     Ok(())
 }
 
-async fn withdraw(
+pub async fn withdraw(
     raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,
@@ -126,7 +153,7 @@ async fn withdraw(
     Ok(())
 }
 
-async fn lookup_balance(
+pub async fn lookup_balance(
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20],
@@ -149,7 +176,7 @@ async fn lookup_balance(
     Ok(mybalance)
 }
 
-async fn lookup_noofclaimers(
+pub async fn lookup_noofclaimers(
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20]
@@ -171,7 +198,7 @@ async fn lookup_noofclaimers(
     Ok(mynoofclaimers)
 }
 
-async fn transferfunc(
+pub async fn transferfunc(
     raw_account: [u8; 20], 
     raw_contract_address: [u8; 20], 
     abi: String,

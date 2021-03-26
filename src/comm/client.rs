@@ -3,7 +3,7 @@
 //! Defines the client operation for CoinShuffling
 
 use super::errors;
-use super::funccall;
+use super::funccall::transferfunc;
 use super::messages::Message;
 use super::net::Connector;
 use super::peers::{AccountNum, AccountNumEnc, Peer};
@@ -12,6 +12,9 @@ use rand::{self, seq::SliceRandom};
 use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::io;
+//for contract call
+use web3::types::U256;
+use tokio2::runtime::Runtime;
 
 pub const DEFAULT_MAX_USERS: usize = 100;
 
@@ -235,12 +238,19 @@ impl<C: Connector> Client<C> {
         Ok(())
     }
 
-    pub fn run_commit_phase(&mut self) -> io::Result<()> {
-        self.commitmsg.signatures_v = vec![0_u8; self.peers.len()];
-        self.commitmsg.signatures_r = vec![[0_u8; 32]; self.peers.len()];
-        self.commitmsg.signatures_s = vec![[0_u8; 32]; self.peers.len()];
+    pub fn run_commit_phase(
+        &mut self, 
+        commiter: AccountNum, 
+        contract_address: AccountNum, 
+        abi: String,
+    ) -> io::Result<()> {
+        self.commitmsg.signatures_v = vec![0_u8;self.peers.len()];
+        self.commitmsg.signatures_r = vec![[0_u8;32];self.peers.len()];
+        self.commitmsg.signatures_s = vec![[0_u8;32];self.peers.len()];
         self.sign_announce_commitmsg()?;
-        Ok(())
+        self.receive_commitmsg()?;
+        //The hoster commit the transaction
+        self.commit(commiter, contract_address, abi)
     }
 
     fn announce_ek(&mut self) -> io::Result<()> {
@@ -490,7 +500,7 @@ impl<C: Connector> Client<C> {
                 }
 
                 // we have already received a different key for this id
-                if (self.commitmsg.signatures_v[id as usize] != 0_u8) {
+                if self.commitmsg.signatures_v[id as usize] != 0_u8 {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("key already received from {:x?}", derived_acc),
@@ -504,6 +514,32 @@ impl<C: Connector> Client<C> {
             }
         }
 
+        Ok(())
+    }
+
+    fn commit(&mut self, commiter: AccountNum, contract_address: AccountNum, abi: String,) -> io::Result<()> {
+        assert_ne!(self.peers[self.my_id as usize].acc, commiter, 
+            "You're not the correct account number to commit the block!");
+        let senders: Vec<[u8;20]> = self.peers.iter().map(|i| i.acc).collect();
+        let receivers: Vec<[u8;20]> = self.commitmsg.final_list.clone();
+        let noofclaimers = self.commitmsg.final_list.len() as u128;
+        let amount = U256::from(self.amount);
+        let v: Vec<u8> = self.commitmsg.signatures_v.clone();
+        let r: Vec<U256> = self.commitmsg.signatures_r.clone().iter().map(|i| U256::from(i)).collect();
+        let s: Vec<U256> = self.commitmsg.signatures_s.clone().iter().map(|i| U256::from(i)).collect();
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(transferfunc(
+            commiter, 
+            contract_address, 
+            abi,
+            senders,
+            receivers,
+            noofclaimers,
+            amount,
+            v,
+            r,
+            s,
+        )).unwrap();
         Ok(())
     }
 }
