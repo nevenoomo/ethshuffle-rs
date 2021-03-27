@@ -41,7 +41,7 @@ pub async fn init_register(
     hoster_start_timestamp: u128,
     hoster_end_timestamp: u128,
     hoster_ip_addr: u32,
-    claimer_ip_addr: u32,
+    port: u16,
     amount_deposit: U256
 ) -> web3::contract::Result<()> {
     let _ = env_logger::try_init();
@@ -64,7 +64,7 @@ pub async fn init_register(
             hoster_start_timestamp,
             hoster_end_timestamp,
             hoster_ip_addr,
-            claimer_ip_addr,
+            port,
         ),
         account, 
         Options::with(
@@ -81,7 +81,6 @@ pub async fn follow_register(
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20],
-    claimer_ip_addr: u32,
     amount_deposit: U256
 ) -> web3::contract::Result<()> {
     let _ = env_logger::try_init();
@@ -102,7 +101,6 @@ pub async fn follow_register(
     let tx = contract.call_with_confirmations(
         "followRegister", 
         (   first_claimer,
-            claimer_ip_addr,
         ),
         account, 
         Options::with(
@@ -263,15 +261,13 @@ fn register_test() {
         1816449919_u128,
         1916449919_u128,
         0x7F000002_u32,
-        0x7F000003_u32,
+        3000_u16,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(follow_register(
         [0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45], 
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
-        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
-        0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(lookup_balance(
@@ -320,15 +316,13 @@ fn withdraw_test() {
         1816449919_u128,
         1916449919_u128,
         0x7F000002_u32,
-        0x7F000003_u32,
+        3000_u16,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(follow_register(
         [0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45], 
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
-        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
-        0x7F000003_u32,
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(lookup_balance( 

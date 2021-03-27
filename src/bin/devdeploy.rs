@@ -3,6 +3,7 @@ use std::error::Error;
 use clap::{App, Arg};
 use std::path::Path;
 use ethshuffle_rs::funccall::devdeploy;
+use hex::FromHex;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let matches = App::new("EthShuffle Contract Deployment")
@@ -34,14 +35,25 @@ fn main() -> Result<(), Box<dyn Error>> {
                     _ => Err(String::from("Abi-json file not exist")),
                 }),
         )
+        .arg(
+            Arg::with_name("acc")
+                .help("account address")
+                .long("account")
+                .short("acc")
+                .takes_value(true)
+                .value_name("ACC")
+                .required(true),
+        )
         .get_matches();
 
     let bin = matches.value_of("bin").unwrap();
     let abi = matches.value_of("abi").unwrap();
+    let accstring = matches.value_of("acc").unwrap();
+    let account: [u8; 20] = <[u8; 20]>::from_hex(accstring).expect("Decoding failed");
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(devdeploy(
-        [0x77,0x40,0x62,0x7c,0x47,0x1d,0x18,0x44,0x01,0xa1,0x17,0xcd,0xA2,0xAf,0x5c,0x20,0xb2,0x14,0x15,0xC9],
+        account,
         bin.to_string(), abi.to_string(),)).unwrap();
     Ok(())
 }

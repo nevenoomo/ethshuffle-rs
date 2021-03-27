@@ -28,3 +28,4 @@ env_logger = "0.8"
 hex-literal = "0.3"
 wasm-bindgen-test = "0.3.19"
 tokio2 = { package = "tokio", version = "0.2.0", features = ["full"] }
+hex = "0.4"

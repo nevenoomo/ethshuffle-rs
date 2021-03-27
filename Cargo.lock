@@ -659,6 +659,7 @@ dependencies = [
  "ethkey",
  "futures",
  "generic-array 0.14.4",
+ "hex",
  "hex-literal",
  "rand 0.7.3",
  "serde",
