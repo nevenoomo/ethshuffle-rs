@@ -640,7 +640,7 @@ dependencies = [
  "parity-crypto 0.3.1",
  "rand 0.6.5",
  "rustc-hex",
- "secp256k1",
+ "secp256k1 0.15.5",
  "serde_json",
  "thiserror",
  "uuid",
@@ -680,7 +680,7 @@ dependencies = [
  "parity-crypto 0.4.2",
  "rand 0.7.3",
  "rustc-hex",
- "secp256k1",
+ "secp256k1 0.15.5",
  "serde",
  "zeroize 1.2.0",
 ]
@@ -2056,6 +2056,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "secp256k1"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "733b114f058f260c0af7591434eef4272ae1a8ec2751766d3cb89c6df8d5e450"
+dependencies = [
+ "secp256k1-sys",
+]
+
+[[package]]
+name = "secp256k1-sys"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67e4b6455ee49f5901c8985b88f98fb0a0e1d90a6661f5a03f4888bd987dad29"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "security-framework"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2772,6 +2790,7 @@ dependencies = [
  "parking_lot",
  "pin-project",
  "rlp",
+ "secp256k1 0.20.1",
  "serde",
  "serde_json",
  "tiny-keccak 2.0.2",
