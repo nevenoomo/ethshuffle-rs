@@ -2,6 +2,7 @@ use web3::{
     contract::{Contract, Options},
     types::{Address,U256},
 };
+use web3::contract::Error::InvalidOutputType;
 use ethabi;
 use ethabi::Token;
 use std::fs::File;
@@ -151,6 +152,45 @@ pub async fn withdraw(
     Ok(())
 }
 
+pub async fn updateek(
+    raw_account: [u8; 20], 
+    raw_contract_address: [u8; 20], 
+    abi: String,
+    raw_first_claimer: [u8; 20],
+    index: u128,
+    ek: U256
+) -> web3::contract::Result<()> {
+    let _ = env_logger::try_init();
+    let transport = web3::transports::Http::new("http://localhost:8545")?;
+    let web3 = web3::Web3::new(transport);
+    // Get current balance
+    let account = Address::from_slice(&raw_account);
+    let balance = web3.eth().balance(account, None).await?;
+    println!("Balance: {}", balance);
+    let json = File::open(abi).unwrap();
+    let abi_json = ethabi::Contract::load(json).unwrap();
+    let contract_address = Address::from_slice(&raw_contract_address);
+    let contract = Contract::new(web3.eth(), contract_address, abi_json);
+    println!("Deployed at: {:?}", contract.address());
+    let first_claimer = Address::from_slice(&raw_first_claimer);
+    println!("ek to be updated is: {:#x}", ek);
+    // Change state of the contract
+    let tx = contract.call_with_confirmations(
+        "updateEk", 
+        (   first_claimer,
+            index,
+            ek,
+        ),
+        account, 
+        Options::with(
+            |opt| opt.gas = Some(3_000_000.into())
+        ), 
+        1)
+        .await?;
+    println!("TxHash: {:?}", tx);
+    Ok(())
+}
+
 pub async fn lookup_balance(
     raw_contract_address: [u8; 20], 
     abi: String,
@@ -172,6 +212,64 @@ pub async fn lookup_balance(
     let mybalance: U256 = result.await?;
     println!("Balance in contract: {:#x}", mybalance);
     Ok(mybalance)
+}
+
+pub async fn lookup_balance_byaddr_and_check(
+    raw_contract_address: [u8; 20], 
+    abi: String,
+    raw_first_claimer: [u8; 20],
+    raw_addr: [u8; 20],
+    amount: u32,
+) -> web3::contract::Result<U256> {
+    let _ = env_logger::try_init();
+    let transport = web3::transports::Http::new("http://localhost:8545")?;
+    let web3 = web3::Web3::new(transport);
+    let json = File::open(abi).unwrap();
+    let abi_json = ethabi::Contract::load(json).unwrap();
+    let contract_address = Address::from_slice(&raw_contract_address);
+    let contract = Contract::new(web3.eth(), contract_address, abi_json);
+    println!("Deployed at: {:?}", contract.address());
+
+    let first_claimer = Address::from_slice(&raw_first_claimer);
+    let addr = Address::from_slice(&raw_addr);
+    // Change state of the contract
+    let result = contract.query("lookUpBalanceByAddr",(first_claimer,addr,), None, Options::default(), None);
+    let mybalance: U256 = result.await?;
+    println!("Balance in contract: {:#x}", mybalance);
+    if mybalance.low_u32() >= amount {
+        Ok(mybalance)
+    }else{
+        Err(InvalidOutputType("balance is not enough".to_string()))
+    }
+}
+
+pub async fn lookup_ek_byaddr_and_check(
+    raw_contract_address: [u8; 20], 
+    abi: String,
+    raw_first_claimer: [u8; 20],
+    raw_addr: [u8; 20],
+    ek: U256,
+) -> web3::contract::Result<U256> {
+    let _ = env_logger::try_init();
+    let transport = web3::transports::Http::new("http://localhost:8545")?;
+    let web3 = web3::Web3::new(transport);
+    let json = File::open(abi).unwrap();
+    let abi_json = ethabi::Contract::load(json).unwrap();
+    let contract_address = Address::from_slice(&raw_contract_address);
+    let contract = Contract::new(web3.eth(), contract_address, abi_json);
+    println!("Deployed at: {:?}", contract.address());
+
+    let first_claimer = Address::from_slice(&raw_first_claimer);
+    let addr = Address::from_slice(&raw_addr);
+    // Change state of the contract
+    let result = contract.query("lookUpEkByAddr",(first_claimer,addr,), None, Options::default(), None);
+    let myek: U256 = result.await?;
+    println!("Ek in contract: {:#x}", myek);
+    if myek == ek {
+        Ok(myek)
+    }else{
+        Err(InvalidOutputType("ek does not match".to_string()))
+    }
 }
 
 pub async fn lookup_noofclaimers(
@@ -268,6 +366,7 @@ fn register_test() {
         [0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45], 
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09], 
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(lookup_balance(
@@ -323,6 +422,7 @@ fn withdraw_test() {
         [0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45], 
         predefined_contract_address,
         "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
         U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
     )).unwrap();
     rt.block_on(lookup_balance( 
