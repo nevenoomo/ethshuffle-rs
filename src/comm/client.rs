@@ -257,11 +257,13 @@ impl<C: Connector> Client<C> {
                 self.check_final_list(
                     last_peer_id,
                     last_peer_session_id,
-                    receivers,
+                    &receivers,
                     signature_v,
-                    signature_r,
-                    signature_s,
+                    &signature_r,
+                    &signature_s,
                 )?;
+
+                self.commitmsg.final_list = receivers;
             } else {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -296,10 +298,10 @@ impl<C: Connector> Client<C> {
         &mut self,
         id: u16,
         session_id: u64,
-        receivers: Vec<AccountNum>,
+        receivers: &Vec<AccountNum>,
         signature_v: u8,
-        signature_r: [u8; 32],
-        signature_s: [u8; 32],
+        signature_r: &[u8; 32],
+        signature_s: &[u8; 32],
     ) -> io::Result<()> {
         let last_peer = &self.peers[self.peers.len() - 1];
 
@@ -309,8 +311,8 @@ impl<C: Connector> Client<C> {
 
         let signature = ethkey::Signature {
             v: signature_v,
-            r: signature_r,
-            s: signature_s,
+            r: *signature_r,
+            s: *signature_s,
         };
 
         let mut hasher = Keccak256::new();
