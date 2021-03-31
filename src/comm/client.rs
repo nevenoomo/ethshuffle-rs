@@ -568,7 +568,11 @@ impl<C: Connector> Client<C> {
                     }                    
                 }
             }
-            Ok(())
+            println!("Peer address {:?} sends incorrect blame message", self.peers[id as usize].acc);
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "Incorrect blame message. Quit now ...",
+            ));
         }else{
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
