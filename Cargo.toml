@@ -22,7 +22,7 @@ tokio-util = { version = "0.6.4", features = ["full"] }
 # CLI
 clap = "^2.33.3"
 # web3
-web3 = { version = "^0.15.0", default-features = false, features = ["http"] }
+web3 = { version = "^0.15.0", default-features = false, features = ["http", "signing"] }
 ethabi = "13.0.0"
 env_logger = "0.8"
 hex-literal = "0.3"
