@@ -1,7 +1,67 @@
 use clap::{App, Arg};
-use ethshuffle_rs::DEFAULT_PORT;
-use std::net::IpAddr;
+use ethkey::{EthAccount, Password, SecretKey};
+use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum, DEFAULT_PORT};
+use std::convert::TryInto;
+use std::fmt::Debug;
+use std::io;
+use std::net::{IpAddr, ToSocketAddrs};
+use std::path::Path;
 use std::str::FromStr;
+
+fn run<S: ToSocketAddrs, P: AsRef<Path> + Debug>(
+    addr: S,
+    session_id: u64,
+    peer_accounts: Vec<&AccountNum>,
+    this_account: AccountNum,
+    sk: SecretKey,
+    commiter: AccountNum,
+    contract_address: AccountNum,
+    abi: String,
+    amount: u32,
+    output_passwd: Password,
+    output_path: P,
+) -> io::Result<()> {
+    let conn = RelayConnector::new(addr)?;
+    let mut client = Client::new(
+        conn,
+        session_id,
+        peer_accounts,
+        &this_account,
+        sk,
+        commiter,
+        contract_address,
+        abi,
+        amount,
+    );
+
+    client.run_announcement_phase()?;
+
+    let acc = EthAccount::load_or_generate(output_path.as_ref(), output_passwd).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "could not use keystore {:?} as and output: {}",
+                output_path, e
+            ),
+        )
+    })?;
+
+    let addr: AccountNum = acc.address().to_vec().try_into().unwrap();
+    client.run_shuffle_phase(&addr).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("shuffling phase failed: {}", e),
+        )
+    })?;
+    client.verification_phase().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("verification phase failed: {}", e),
+        )
+    })?;
+
+    Ok(())
+}
 
 fn main() {
     let matches = App::new("EthShuffle - Ethereum Coin Mixing")

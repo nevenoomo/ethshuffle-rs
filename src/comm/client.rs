@@ -49,6 +49,10 @@ pub struct Client<C> {
 }
 
 impl<C: Connector> Client<C> {
+    // FIXME update documentation
+    // FIXME should not have so many arguments!! Use structures to bring together related 
+    // arguments (for example, create a contract structure to hold `abi` and `contract_address`)
+
     /// Creates a new `Client` from the underlying connection, other peer *ethereum addresses*,
     /// *self ethereum address*, and *own ethereum signing key*.
     pub fn new<'a, 'b: 'a>(
