@@ -52,7 +52,7 @@ impl<C: Connector> Client<C> {
     /// Creates a new `Client` from the underlying connection, other peer *ethereum addresses*,
     /// *self ethereum address*, and *own ethereum signing key*.
     pub fn new<'a, 'b: 'a>(
-        conn: C,
+        mut conn: C,
         session_id: u64,
         mut peer_accounts: Vec<&'a AccountNum>,
         my_account: &'b AccountNum,
@@ -83,6 +83,7 @@ impl<C: Connector> Client<C> {
         let (dk, ek) = ecies::generate_keypair(&mut rng);
 
         peers[my_id as usize].ek = ek;
+        conn.set_id(my_id);
 
         Client {
             my_id,

@@ -97,7 +97,13 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
 
         // We use `id` 0 to refer to broadcasting
         if r_msg.to_id == 0 {
-            broadcast(clients_wr.values_mut(), item).await?;
+            broadcast(
+                clients_wr
+                    .iter_mut()
+                    .filter_map(|(&id, cl)| if id != r_msg.from_id { Some(cl) } else { None }),
+                item,
+            )
+            .await?;
         } else if let Some(client) = clients_wr.get_mut(&r_msg.to_id) {
             // FIXME This blocks the execution. Should spawn a task here.
             client.send(item).await?;

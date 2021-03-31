@@ -19,11 +19,14 @@ pub trait Connector {
     fn recv_from(&mut self, p: &Peer) -> io::Result<Message>;
     /// Broadcast a given message to all peers
     fn broadcast(&mut self, ps: &[Peer], m: Message) -> io::Result<()>;
+    /// Set the id of this connector 
+    fn set_id(&mut self, id: u16);
 }
 
 /// A connector to use a relay server for communicating with peers.
 pub struct RelayConnector {
     stream: net::TcpStream,
+    id: u16,
 }
 
 impl RelayConnector {
@@ -39,7 +42,7 @@ impl RelayConnector {
         };
         let stream = net::TcpStream::connect(addr)?;
 
-        Ok(RelayConnector { stream })
+        Ok(RelayConnector { stream, id: 0 })
     }
 }
 
@@ -76,10 +79,14 @@ impl RelayConnector {
 }
 
 impl Connector for RelayConnector {
+    fn set_id(&mut self, id: u16) {
+        self.id = id;
+    }
+
     fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
         self.send_length_header(&m)?;
 
-        let r_msg = RelayMessage::new(p.id, m);
+        let r_msg = RelayMessage::new(p.id, self.id, m);
 
         bincode::serialize_into(&self.stream, &r_msg)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "could not send a message"))
