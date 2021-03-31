@@ -582,9 +582,13 @@ impl<C: Connector> Client<C> {
     }
 
     pub fn verification_phase(&mut self) -> io::Result<()> {
+        self.receive_final_list_phase()?;
+        self.run_commit_phase(self.commiter, self.contract_address, self.abi.clone())?;
         Ok(())
     }
-
+    pub fn receive_final_list_phase(&mut self) -> io::Result<()> {
+        Ok(())
+    }
     pub fn run_commit_phase(
         &mut self, 
         commiter: AccountNum, 

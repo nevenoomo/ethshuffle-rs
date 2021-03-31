@@ -60,7 +60,14 @@ pub enum Message {
         incorrectshuffleinfo: Option<BlameShuffling>,
     },
     /// Final list of receiver addresses
-    FinalList(Vec<AccountNum>),
+    FinalList{
+        last_peer_id: u16,
+        last_peer_session_id: u64,
+        receivers: Vec<AccountNum>,
+        signature_v: u8,
+        signature_r: [u8; 32],
+        signature_s: [u8; 32],
+    },
     /// Intermediate Message for commit phase
     CommitMsg {
         id: u16,
