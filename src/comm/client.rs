@@ -3,8 +3,8 @@
 //! Defines the client operation for CoinShuffling
 
 use super::errors;
-use super::funccall::transferfunc;
-use super::messages::Message;
+use super::funccall::{transferfunc, lookup_balance_byaddr_and_check, lookup_ek_byaddr_and_check};
+use super::messages::{Message, BlameReason, BlameShuffling};
 use super::net::Connector;
 use super::peers::{AccountNum, AccountNumEnc, Peer};
 use ecies_ed25519 as ecies;
@@ -35,9 +35,15 @@ pub struct Client<C> {
     peers: Vec<Peer>,
     dk: ecies::SecretKey,
     sk: ethkey::SecretKey,
-    //amount to be transfered
+    // The commiter who commit the transaction: the hoster
+    commiter: AccountNum,
+    // Contract address
+    contract_address: AccountNum, 
+    // Contract abi json file in path
+    abi: String,
+    // amount to be transfered
     amount: u32,
-    //commit message to be committed to the chain
+    // commit message to be committed to the chain
     commitmsg: CommitmsgPrepare,
 }
 
@@ -50,6 +56,9 @@ impl<C: Connector> Client<C> {
         mut peer_accounts: Vec<&'a AccountNum>,
         my_account: &'b AccountNum,
         sk: ethkey::SecretKey,
+        commiter: AccountNum,
+        contract_address: AccountNum, 
+        abi: String,
         amount: u32,
     ) -> Client<C> {
         // We need to derive Peer IDs from the account numbers. We use the ordering between account numbers
@@ -81,6 +90,9 @@ impl<C: Connector> Client<C> {
             peers,
             dk,
             sk,
+            commiter,
+            contract_address,
+            abi,
             amount,
             commitmsg: CommitmsgPrepare {
                 final_list: vec![],
@@ -230,8 +242,343 @@ impl<C: Connector> Client<C> {
         Ok(())
     }
 
-    pub fn trigger_blame_phase(&mut self) -> io::Result<()> {
-        Ok(())
+    pub fn trigger_blame_phase(&mut self, msg: BlameReason, shuffleinfo: Option<BlameShuffling>) -> io::Result<()> {
+        if let BlameReason::NotEnoughBalance (adversary_id) = msg {
+            let mut hasher = Keccak256::new();
+            hasher.update(self.my_id.to_le_bytes());
+            hasher.update(self.session_id.to_le_bytes());
+            hasher.update(adversary_id.to_le_bytes());
+            let hash = hasher.finalize();
+    
+            let ethkey::Signature {
+                r: signature_r,
+                s: signature_s,
+                v: signature_v,
+            } = self.sk.sign(hash.as_slice()).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to sign the message: {}", e),
+                )
+            })?;
+
+            let m = Message::AnnounceBlame {
+                id: self.my_id,
+                session_id: self.session_id,
+                blame_msg: msg,
+                signature_v,
+                signature_r,
+                signature_s,
+                dk: None,
+                incorrectshuffleinfo: None,
+            };
+    
+            self.conn.broadcast(&self.peers, m)?;
+            println!("Peer address {:?} doesn't have enough balance in contract", self.peers[adversary_id as usize].acc);
+            Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "The blame message is broadcasted. Quit now ...",
+            ))      
+        } else if let BlameReason::IncorrectKeyExchange (adversary_id) = msg {
+            let mut hasher = Keccak256::new();
+            hasher.update(self.my_id.to_le_bytes());
+            hasher.update(self.session_id.to_le_bytes());
+            hasher.update(adversary_id.to_le_bytes());
+            let hash = hasher.finalize();
+    
+            let ethkey::Signature {
+                r: signature_r,
+                s: signature_s,
+                v: signature_v,
+            } = self.sk.sign(hash.as_slice()).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to sign the message: {}", e),
+                )
+            })?;
+
+            let m = Message::AnnounceBlame {
+                id: self.my_id,
+                session_id: self.session_id,
+                blame_msg: msg,
+                signature_v,
+                signature_r,
+                signature_s,
+                dk: None,
+                incorrectshuffleinfo: None,
+            };
+
+            self.conn.broadcast(&self.peers, m)?;
+            println!("Peer address {:?} doesn't send correct dnc key in contract", self.peers[adversary_id as usize].acc);
+            Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "The blame message is broadcasted. Quit now ...",
+            ))  
+        } else if let BlameReason::IncorrectShuffling (adversary_id) = msg {
+            if let BlameShuffling::BlameInformation {
+                ad_id,
+                ad_perm,
+                ad_session_id,
+                ad_signature_v,
+                ad_signature_r,
+                ad_signature_s,  
+            } = shuffleinfo.unwrap()
+            {
+                let mut hasher = Keccak256::new();
+                hasher.update(self.my_id.to_le_bytes());
+                hasher.update(adversary_id.to_le_bytes());
+                hasher.update(self.dk.to_bytes());
+                ad_perm.iter().for_each(|x| hasher.update(x));
+                hasher.update(ad_session_id.to_le_bytes());
+                hasher.update(ad_signature_v.to_le_bytes());
+                hasher.update(ad_signature_r);
+                hasher.update(ad_signature_s);
+                let hash = hasher.finalize();
+        
+                let ethkey::Signature {
+                    r: signature_r,
+                    s: signature_s,
+                    v: signature_v,
+                } = self.sk.sign(hash.as_slice()).map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("failed to sign the message: {}", e),
+                    )
+                })?;
+
+                let m = Message::AnnounceBlame {
+                    id: self.my_id,
+                    session_id: self.session_id,
+                    blame_msg: msg,
+                    signature_v,
+                    signature_r,
+                    signature_s,
+                    dk: Some(self.dk.to_bytes()),
+                    incorrectshuffleinfo: Some(BlameShuffling::BlameInformation {
+                        ad_id,
+                        ad_perm,
+                        ad_session_id,
+                        ad_signature_v,
+                        ad_signature_r,
+                        ad_signature_s,                          
+                    }),
+                };
+        
+                self.conn.broadcast(&self.peers, m)?;
+                println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Incorrect Shuffle message from the previous peers. Dnc key is broadcasted. Quit now ...",
+                ))   
+            }else{
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "expected permutation message",
+                ))                
+            }
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "expected blame message",
+            ))
+        }
+    }
+
+    pub fn run_blame_phase(&mut self, m: Message) -> io::Result<()> {
+        if let Message::AnnounceBlame {
+            id,
+            session_id,
+            blame_msg,
+            signature_v,
+            signature_r,
+            signature_s,
+            dk,
+            incorrectshuffleinfo,
+        } = m
+        {
+            // check whether we know this id
+            if id as usize >= self.peers.len() {
+                return Err(errors::unexpected_peer_id(id));
+            }
+
+            let signature = ethkey::Signature {
+                r: signature_r,
+                s: signature_s,
+                v: signature_v,
+            };
+
+            let mut hasher = Keccak256::new();
+
+            hasher.update(id.to_le_bytes());
+            hasher.update(session_id.to_le_bytes());
+
+            let peerincorrectshuffleinfo = incorrectshuffleinfo.unwrap();
+            if let BlameReason::NotEnoughBalance(adversary_id) = blame_msg {
+                hasher.update(adversary_id.to_le_bytes());
+            }else if let BlameReason::IncorrectKeyExchange(adversary_id) = blame_msg {
+                hasher.update(adversary_id.to_le_bytes());
+            }else if let BlameReason::IncorrectShuffling(adversary_id) = blame_msg {
+                hasher.update(adversary_id.to_le_bytes());
+                if let BlameShuffling::BlameInformation {
+                    ad_id: _,
+                    ref ad_perm,
+                    ad_session_id,
+                    ad_signature_v,
+                    ad_signature_r,
+                    ad_signature_s,  
+                } = peerincorrectshuffleinfo
+                {
+                    hasher.update(dk.unwrap());
+                    ad_perm.iter().for_each(|x| hasher.update(x));
+                    hasher.update(ad_session_id.to_le_bytes());
+                    hasher.update(ad_signature_v.to_le_bytes());
+                    hasher.update(ad_signature_r);
+                    hasher.update(ad_signature_s);
+                }
+            }
+
+            let hashed_msg = hasher.finalize();
+            // recover the signer
+            let vk = self.recover_pub_key(&hashed_msg, &signature)?;
+
+            let derived_acc = vk.address();
+            let peer_acc = self.peers[id as usize].acc;
+
+            // the signer is not the one with the given id
+            if *derived_acc != peer_acc {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("impersonalisation attempt by {:x?}", derived_acc),
+                ));
+            }
+
+            // verify the signature
+            match vk.verify(&signature, hashed_msg.as_slice()) {
+                Ok(valid) if !valid => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "signature is invalid\nBlame account number: {:x?}",
+                            derived_acc
+                        ),
+                    ))
+                }
+                Err(e) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "signature validation failed: {}\nBlame account number: {:x?}",
+                            e, derived_acc
+                        ),
+                    ))
+                }
+                _ => (),
+            }
+            if let BlameReason::NotEnoughBalance(adversary_id) = blame_msg {
+                let mut rt = Runtime::new().unwrap();
+                rt.block_on(lookup_balance_byaddr_and_check(
+                    self.contract_address, 
+                    self.abi.clone(),
+                    self.commiter,
+                    self.peers[adversary_id as usize].acc,
+                    self.amount,
+                )).unwrap();
+            }else if let BlameReason::IncorrectKeyExchange(adversary_id) = blame_msg {
+                let mut rt = Runtime::new().unwrap();
+                rt.block_on(lookup_ek_byaddr_and_check(
+                    self.contract_address, 
+                    self.abi.clone(),
+                    self.commiter,
+                    self.peers[adversary_id as usize].acc,
+                    U256::from(self.peers[adversary_id as usize].ek.to_bytes()),
+                )).unwrap();
+            }else if let BlameReason::IncorrectShuffling(adversary_id) = blame_msg {
+                let peerincorrectshuffleinfo2 = peerincorrectshuffleinfo.clone();
+                if let BlameShuffling::BlameInformation {
+                    ad_id,
+                    ad_perm,
+                    ad_session_id,
+                    ad_signature_v,
+                    ad_signature_r,
+                    ad_signature_s,  
+                } = peerincorrectshuffleinfo2
+                {
+                    if ad_id as usize != id as usize - 1 {
+                        println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                        return Err(io::Error::new(
+                            io::ErrorKind::Interrupted,
+                            "Incorrect Shuffle message from the previous peers. Quit now ...",
+                        ));
+                    }
+    
+                    let signature = ethkey::Signature {
+                        v: ad_signature_v,
+                        r: ad_signature_r,
+                        s: ad_signature_s,
+                    };
+    
+                    let mut hasher = Keccak256::new();
+    
+                    ad_perm.iter().for_each(|b| hasher.update(b));
+                    hasher.update(&[2u8]);
+                    hasher.update(ad_session_id.to_le_bytes());
+    
+                    let msg_hash = hasher.finalize();
+    
+                    // FIXME Repetitive code
+                    let vk = self.recover_pub_key(&msg_hash, &signature)?;
+    
+                    let derived_acc = vk.address();
+                    let peer_acc = self.peers[id as usize].acc;
+    
+                    // check the session id
+                    if session_id != ad_session_id {
+                        println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                        return Err(io::Error::new(
+                            io::ErrorKind::Interrupted,
+                            "Incorrect Shuffle message from the previous peers. Quit now ...",
+                        ));
+                    }
+    
+                    // the signer is not the one with the given id
+                    if *derived_acc != peer_acc {
+                        println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                        return Err(io::Error::new(
+                            io::ErrorKind::Interrupted,
+                            "Incorrect Shuffle message from the previous peers. Quit now ...",
+                        ));
+                    }
+    
+                    // verify the signature
+                    match vk.verify(&signature, msg_hash.as_slice()) {
+                        Ok(valid) if !valid => {
+                            println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                            return Err(io::Error::new(
+                                io::ErrorKind::Interrupted,
+                                "Incorrect Shuffle message from the previous peers. Quit now ...",
+                            ));
+                        }
+                        Err(_) => {
+                            println!("Peer address {:?} sends incorrect Shuffle message", self.peers[adversary_id as usize].acc);
+                            return Err(io::Error::new(
+                                io::ErrorKind::Interrupted,
+                                "Incorrect Shuffle message from the previous peers. Quit now ...",
+                            ));
+                        }
+                        _ => (),
+                    }                    
+                }
+            }
+            println!("Peer address {:?} sends incorrect blame message", self.peers[id as usize].acc);
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "Incorrect blame message. Quit now ...",
+            ));
+        }else{
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "expected blame message",
+            ))           
+        }
     }
 
     pub fn verification_phase(&mut self) -> io::Result<()> {

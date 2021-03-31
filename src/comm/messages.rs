@@ -6,6 +6,25 @@ use serde::{Deserialize, Serialize};
 use ecies_ed25519::{PublicKey};
 use super::peers::{AccountNum, AccountNumEnc};
 
+/// Blame reasons
+#[derive(Clone, Serialize, Deserialize)]
+pub enum BlameReason {
+    NotEnoughBalance(u16),
+    IncorrectShuffling(u16),
+    IncorrectKeyExchange(u16),
+}
+///blame shuffling permutation information
+#[derive(Clone, Serialize, Deserialize)]
+pub enum BlameShuffling {
+    BlameInformation{
+        ad_id: u16,
+        ad_perm: Vec<AccountNumEnc>,
+        ad_session_id: u64,
+        ad_signature_v: u8,
+        ad_signature_r: [u8; 32],
+        ad_signature_s: [u8; 32],        
+    },
+}
 /// Generic message types
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Message {
@@ -28,6 +47,17 @@ pub enum Message {
         signature_v: u8,
         signature_r: [u8; 32],
         signature_s: [u8; 32],
+    },
+    /// Message for run blame phase
+    AnnounceBlame {
+        id: u16,
+        session_id: u64,
+        blame_msg: BlameReason,
+        signature_v: u8,
+        signature_r: [u8; 32],
+        signature_s: [u8; 32],
+        dk: Option<[u8;32]>,
+        incorrectshuffleinfo: Option<BlameShuffling>,
     },
     /// Final list of receiver addresses
     FinalList(Vec<AccountNum>),
