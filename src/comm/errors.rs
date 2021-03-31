@@ -79,3 +79,10 @@ pub(crate) fn encryption_failure<E: std::fmt::Display>(due_error: E) -> Error {
         format!("failed to encrypt: {}", due_error),
     )
 }
+
+pub(crate) fn corrupted_final_permutation() -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("the received output accounts' permutation is incorrect"),
+    )
+}
