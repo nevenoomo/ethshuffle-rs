@@ -157,7 +157,6 @@ pub async fn updateek(
     raw_contract_address: [u8; 20], 
     abi: String,
     raw_first_claimer: [u8; 20],
-    index: u128,
     ek: U256
 ) -> web3::contract::Result<()> {
     let _ = env_logger::try_init();
@@ -176,9 +175,8 @@ pub async fn updateek(
     println!("ek to be updated is: {:#x}", ek);
     // Change state of the contract
     let tx = contract.call_with_confirmations(
-        "updateEk", 
+        "updateEkByAddr", 
         (   first_claimer,
-            index,
             ek,
         ),
         account, 

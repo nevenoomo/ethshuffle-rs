@@ -3,7 +3,7 @@
 //! Defines the client operation for CoinShuffling
 
 use super::errors;
-use super::funccall::{lookup_balance_byaddr_and_check, lookup_ek_byaddr_and_check, transferfunc};
+use super::funccall::{lookup_balance_byaddr_and_check, lookup_ek_byaddr_and_check, transferfunc, updateek};
 use super::messages::{BlameReason, BlameShuffling, Message};
 use super::net::Connector;
 use super::peers::{AccountNum, AccountNumEnc, Peer};
@@ -85,6 +85,17 @@ impl<C: Connector> Client<C> {
         // Ephemeral key generation
         let mut rng = rand::thread_rng();
         let (dk, ek) = ecies::generate_keypair(&mut rng);
+
+        //update ek to contract
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(updateek(
+            *my_account,
+            contract_address,
+            abi.clone(),
+            commiter,
+            U256::from(ek.to_bytes()),
+        ))
+        .unwrap();        
 
         peers[my_id as usize].ek = ek;
         conn.set_id(my_id);
