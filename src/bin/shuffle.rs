@@ -1,17 +1,20 @@
 use clap::{App, Arg};
 use ethkey::{EthAccount, Password, SecretKey};
 use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum, DEFAULT_PORT};
+use rustc_hex::FromHex;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::io;
 use std::net::{IpAddr, ToSocketAddrs};
 use std::path::Path;
 use std::str::FromStr;
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 fn run<S: ToSocketAddrs, P: AsRef<Path> + Debug>(
     addr: S,
     session_id: u64,
-    peer_accounts: Vec<&AccountNum>,
+    peer_accounts: Vec<AccountNum>,
     this_account: AccountNum,
     sk: SecretKey,
     commiter: AccountNum,
@@ -25,7 +28,7 @@ fn run<S: ToSocketAddrs, P: AsRef<Path> + Debug>(
     let mut client = Client::new(
         conn,
         session_id,
-        peer_accounts,
+        peer_accounts.iter().collect(),
         &this_account,
         sk,
         commiter,
@@ -63,6 +66,50 @@ fn run<S: ToSocketAddrs, P: AsRef<Path> + Debug>(
     Ok(())
 }
 
+fn parse_eth_addr(s: &str) -> io::Result<AccountNum> {
+    let res_vec: Vec<u8> = s.from_hex().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("failed to parse account address: {}, due to error: {}", s, e),
+        )
+    })?;
+
+    let res = res_vec.try_into().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "number of bytes in account is invalid: {}, due to error: {:?}",
+                s, e
+            ),
+        )
+    })?;
+
+    Ok(res)
+}
+
+fn parse_secret_key(s: &str) -> io::Result<SecretKey> {
+    let res_vec: Vec<u8> = s.from_hex().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("failed to parse the secret key due to error: {}", e),
+        )
+    })?;
+
+    SecretKey::from_raw(&res_vec).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("failed to parse the secret key due to error: {}", e),
+        )
+    })
+}
+
+fn choose_commiter(accs: &[AccountNum], seed: u64) -> &AccountNum {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let commiter_idx: usize = rng.gen_range(0, accs.len()); 
+
+    &accs[commiter_idx]
+}
+
 fn main() {
     let matches = App::new("EthShuffle - Ethereum Coin Mixing")
         .version(env!("CARGO_PKG_VERSION"))
@@ -93,20 +140,6 @@ fn main() {
                 .validator(|x| match x.parse::<u16>() {
                     Ok(_) => Ok(()),
                     Err(_) => Err(String::from("Incorrect port")),
-                }),
-        )
-        .arg(
-            // FIXME omit this parameter and make implementation work with any number of participants
-            Arg::with_name("#participants")
-                .help("the number of participants in the shuffling protocols")
-                .long("participants")
-                .short("n")
-                .required(true)
-                .takes_value(true)
-                .value_name("#PARTICIPANTS")
-                .validator(|x| match x.parse::<u16>() {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(String::from("Incorrect number of participants")),
                 }),
         )
         .arg(
