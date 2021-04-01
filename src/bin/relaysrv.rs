@@ -2,6 +2,11 @@
 //!
 //! Implements a routing server to be used along with the EthShuffle.
 
+// Testing reply message serialize and deserialize program
+// ./target/debug/relaysrv -n 2 -a 127.0.0.1 -p 5000
+// cargo test first_client_test -- --nocapture
+// cargo test second_client_test -- --nocapture
+
 use bincode::deserialize_from;
 use clap::{value_t, App, Arg};
 use ethshuffle_rs::messages::{Message, RelayMessage};
