@@ -19,7 +19,7 @@ pub trait Connector {
     fn recv_from(&mut self, p: &Peer) -> io::Result<Message>;
     /// Broadcast a given message to all peers
     fn broadcast(&mut self, ps: &[Peer], m: Message) -> io::Result<()>;
-    /// Set the id of this connector 
+    /// Set the id of this connector
     fn set_id(&mut self, id: u16);
 }
 
@@ -48,11 +48,11 @@ impl RelayConnector {
 
 impl RelayConnector {
     /// Send the length of the next message to the relay server. Implements the length delimited codec
-    fn send_length_header(&mut self, m: &Message) -> io::Result<()> {
-        let n = bincode::serialized_size(&m).map_err(|_| {
+    fn send_length_header(&mut self, m: &RelayMessage) -> io::Result<()> {
+        let n = bincode::serialized_size(&m).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                "could not serialize the message",
+                format!("could not serialize the message: {}", e),
             )
         })?;
 
@@ -84,12 +84,15 @@ impl Connector for RelayConnector {
     }
 
     fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
-        self.send_length_header(&m)?;
-
         let r_msg = RelayMessage::new(p.id, self.id, m);
 
-        bincode::serialize_into(&self.stream, &r_msg)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "could not send a message"))
+        self.send_length_header(&r_msg)?;
+        bincode::serialize_into(&self.stream, &r_msg).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("could not send a message{}", e),
+            )
+        })
     }
 
     fn recv(&mut self) -> io::Result<Message> {
@@ -100,10 +103,10 @@ impl Connector for RelayConnector {
         self.stream.read_exact(buf.as_mut_slice())?;
 
         // deserialize from the received bytes
-        let r_msg: RelayMessage = bincode::deserialize_from(buf.as_slice()).map_err(|_| {
+        let r_msg: RelayMessage = bincode::deserialize_from(buf.as_slice()).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                "could not deserialize the received a message",
+                format!("could not deserialize the received a message: {}", e),
             )
         })?;
 

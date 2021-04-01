@@ -47,14 +47,12 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
     for (i, client_rd) in clients_rd.iter_mut().enumerate() {
         if let Some(item) = client_rd.try_next().await? {
             // deserialize the relay messages
-            let r_msg: RelayMessage = if let Ok(msg) = deserialize_from(&item[..]) {
-                msg
-            } else {
-                return Err(io::Error::new(
+            let r_msg: RelayMessage = deserialize_from(&item[..]).map_err(|e| {
+                io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "the message format for key exchange is incorrect",
-                ));
-            };
+                    format!("the message format for key exchange is incorrect: {}", e),
+                )
+            })?;
 
             // we expect the key announcement message from the clients
             match r_msg.msg {
@@ -91,11 +89,12 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
 
     // Run stream to exhaustion
     while let Some(item) = rds.try_next().await? {
-        let r_msg: RelayMessage = if let Ok(msg) = deserialize_from(&item[..]) {
-            msg
-        } else {
-            eprintln!("ERROR: incorrect incoming message");
-            continue;
+        let r_msg: RelayMessage = match deserialize_from(&item[..]) {
+            Ok(msg) => msg,
+            Err(e) => {
+                eprintln!("ERROR: incorrect incoming message: {}", e);
+                continue;
+            }
         };
 
         let item = item.freeze();
