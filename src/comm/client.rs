@@ -87,15 +87,15 @@ impl<C: Connector> Client<C> {
         let (dk, ek) = ecies::generate_keypair(&mut rng);
 
         //update ek to contract
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(updateek(
-            *my_account,
-            contract_address,
-            abi.clone(),
-            commiter,
-            U256::from(ek.to_bytes()),
-        ))
-        .unwrap();        
+        // let mut rt = Runtime::new().unwrap();
+        // rt.block_on(updateek(
+        //     *my_account,
+        //     contract_address,
+        //     abi.clone(),
+        //     commiter,
+        //     U256::from(ek.to_bytes()),
+        // ))
+        // .unwrap();        
 
         peers[my_id as usize].ek = ek;
         conn.set_id(my_id);
@@ -1046,4 +1046,101 @@ impl<C: Connector> Client<C> {
         .unwrap();
         Ok(())
     }
+}
+
+#[test]
+fn first_client_test() {
+    use super::{net::RelayConnector, peers::AccountNum};
+    use std::net::{SocketAddr};
+    use ethkey::{SecretKey};
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
+    let conn = RelayConnector::new(addr).unwrap();
+
+    let mut client = Client::new(
+        conn,
+        2345 as u64,
+        vec![&[0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45]],
+        &[0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
+        SecretKey::from_raw(&[0x2c,0x2a,0x68,0x71,0xe7,0xe2,0xcd,0x26,0x26,0xf9,0x7a,0xcc,0x7b,0xd7,0xfc,0xba,0x9a,0x27,0x50,0x0f,0xaf,0x93,0x16,0x5f,0xdc,0x66,0x20,0xef,0x0c,0x33,0xc9,0x44]).unwrap(),
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
+        [238, 50, 245, 211, 24, 183, 155, 77, 119, 157, 219, 123, 251, 69, 118, 145, 249, 18, 187, 246],
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        0xFF as u32,
+    );
+
+    client.run_announcement_phase().unwrap();
+
+    // let acc = EthAccount::load_or_generate(output_path.as_ref(), output_passwd).map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!(
+    //             "could not use keystore {:?} as and output: {}",
+    //             output_path, e
+    //         ),
+    //     )
+    // })?;
+
+    // let addr: AccountNum = acc.address().to_vec().try_into().unwrap();
+    // let addr: AccountNum = [0x9D,0x4c,0x42,0xcd,0xE9,0x74,0xA2,0xdF,0x22,0xDF,0x71,0x03,0xB7,0x46,0x9f,0xdb,0x28,0xe0,0x06,0xA6];
+    // client.run_shuffle_phase(&addr).map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!("shuffling phase failed: {}", e),
+    //     )
+    // })?;
+    // client.verification_phase().map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!("verification phase failed: {}", e),
+    //     )
+    // })?;
+}
+#[test]
+fn second_client_test() {
+    use super::{net::RelayConnector, peers::AccountNum};
+    use std::net::{SocketAddr};
+    use ethkey::{SecretKey};
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
+    let conn = RelayConnector::new(addr).unwrap();
+
+    let mut client = Client::new(
+        conn,
+        2345 as u64,
+        vec![&[0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09]],
+        &[0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45],
+        SecretKey::from_raw(&[0xaa,0x77,0x02,0x2b,0x60,0xd5,0xe5,0x11,0xe7,0xc3,0xf3,0xa0,0x20,0x13,0xd9,0xb3,0x5b,0x5c,0x95,0xc0,0xce,0x75,0x3e,0xf6,0x63,0xc6,0xd8,0xdc,0xc8,0xf7,0x61,0xf9]).unwrap(),
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09],
+        [238, 50, 245, 211, 24, 183, 155, 77, 119, 157, 219, 123, 251, 69, 118, 145, 249, 18, 187, 246],
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        0xFF as u32,
+    );
+
+    client.run_announcement_phase().unwrap();
+
+    // let acc = EthAccount::load_or_generate(output_path.as_ref(), output_passwd).map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!(
+    //             "could not use keystore {:?} as and output: {}",
+    //             output_path, e
+    //         ),
+    //     )
+    // })?;
+
+    // let addr: AccountNum = acc.address().to_vec().try_into().unwrap();
+    // let addr: AccountNum = [0x9D,0x4c,0x42,0xcd,0xE9,0x74,0xA2,0xdF,0x22,0xDF,0x71,0x03,0xB7,0x46,0x9f,0xdb,0x28,0xe0,0x06,0xA6];
+    // client.run_shuffle_phase(&addr).map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!("shuffling phase failed: {}", e),
+    //     )
+    // })?;
+    // client.verification_phase().map_err(|e| {
+    //     io::Error::new(
+    //         io::ErrorKind::InvalidInput,
+    //         format!("verification phase failed: {}", e),
+    //     )
+    // })?;
 }

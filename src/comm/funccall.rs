@@ -27,7 +27,7 @@ pub async fn devdeploy(raw_account: [u8; 20], bin: String, abi: String) -> web3:
     let contract = Contract::deploy(web3.eth(), abicontent)?
         .confirmations(1)
         .poll_interval(time::Duration::from_secs(10))
-        .options(Options::with(|opt| opt.gas = Some(3_000_000.into())))
+        .options(Options::with(|opt| opt.gas = Some(5_000_000.into())))
         .execute(bytecode, (), account)
         .await?;
     println!("Deployed at: {:?}", contract.address().as_bytes());
@@ -344,6 +344,37 @@ pub async fn transferfunc(
     println!("TxHash: {:?}", tx);
     Ok(())
 }
+
+#[test]
+fn prepare_test() {
+    use tokio2::runtime::Runtime;
+    let mut rt = Runtime::new().unwrap();
+    let predefined_contract_address = [238, 50, 245, 211, 24, 183, 155, 77, 119, 157, 219, 123, 251, 69, 118, 145, 249, 18, 187, 246];
+    rt.block_on(devdeploy(
+        [0x77,0x40,0x62,0x7c,0x47,0x1d,0x18,0x44,0x01,0xa1,0x17,0xcd,0xA2,0xAf,0x5c,0x20,0xb2,0x14,0x15,0xC9],
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.bin".to_string(),
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+    )).unwrap();
+    rt.block_on(init_register(
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09], 
+        predefined_contract_address,
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        1716449919_u128,
+        1816449919_u128,
+        1916449919_u128,
+        0x7F000002_u32,
+        3000_u16,
+        U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
+    )).unwrap();
+    rt.block_on(follow_register(
+        [0x44,0xde,0x1f,0xaA,0xa2,0xFc,0x62,0x27,0x05,0x00,0xBe,0xA1,0xde,0x45,0x71,0x6f,0xf3,0x2F,0xc9,0x45], 
+        predefined_contract_address,
+        "/Users/zandent/Files/csc2125/ETH_Transfer_Shuffle/build/TrasnsferHelper.abi".to_string(),
+        [0x9c,0xE7,0xd1,0xf9,0x76,0xc2,0xf6,0xd0,0x8D,0xB1,0x9D,0x09,0x1f,0x41,0xd1,0x18,0x9f,0x3A,0xc4,0x09], 
+        U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
+    )).unwrap();    
+}
+
 #[test]
 fn register_test() {
     use tokio2::runtime::Runtime;
