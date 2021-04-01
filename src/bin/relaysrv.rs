@@ -72,7 +72,7 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
                 clients_wr_temp
                     .iter_mut()
                     .enumerate()
-                    .filter_map(|(id, cl)| if id != r_msg.from_id as usize { Some(cl) } else { None }),
+                    .filter_map(|(id, cl)| if id != i { Some(cl) } else { None }),
                 item.freeze(),
             )
             .await?;
@@ -106,8 +106,8 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
 
         let item = item.freeze();
 
-        // We use `id` 0 to refer to broadcasting
-        if r_msg.to_id == 0 {
+        // We use `id` -1 to refer to broadcasting
+        if r_msg.to_id == -1 {
             broadcast(
                 clients_wr
                     .iter_mut()
@@ -115,7 +115,7 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
                 item,
             )
             .await?;
-        } else if let Some(client) = clients_wr.get_mut(&r_msg.to_id) {
+        } else if let Some(client) = clients_wr.get_mut(&(r_msg.to_id as u16)) {
             // FIXME This blocks the execution. Should spawn a task here.
             client.send(item).await?;
         } else {

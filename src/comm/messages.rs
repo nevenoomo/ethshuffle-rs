@@ -85,14 +85,14 @@ pub enum Message {
 /// contains the identifier of the receiving party
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RelayMessage {
-    pub to_id: u16,
+    pub to_id: i32,
     pub from_id: u16,
     pub msg: Message,
 }
 
 impl RelayMessage {
     /// Create a new relay message from the given generic message.
-    pub fn new(to_id: u16, from_id: u16, msg: Message) -> RelayMessage {
+    pub fn new(to_id: i32, from_id: u16, msg: Message) -> RelayMessage {
         RelayMessage{
             to_id,
             from_id,

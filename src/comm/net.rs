@@ -76,15 +76,9 @@ impl RelayConnector {
 
         Ok(n)
     }
-}
 
-impl Connector for RelayConnector {
-    fn set_id(&mut self, id: u16) {
-        self.id = id;
-    }
-
-    fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
-        let r_msg = RelayMessage::new(p.id, self.id, m);
+    fn send_to_id(&mut self, id: i32, m: Message) -> io::Result<()> {
+        let r_msg = RelayMessage::new(id, self.id, m);
 
         self.send_length_header(&r_msg)?;
         bincode::serialize_into(&self.stream, &r_msg).map_err(|e| {
@@ -93,6 +87,16 @@ impl Connector for RelayConnector {
                 format!("could not send a message{}", e),
             )
         })
+    }
+}
+
+impl Connector for RelayConnector {
+    fn set_id(&mut self, id: u16) {
+        self.id = id;
+    }
+
+    fn send_to(&mut self, p: &Peer, m: Message) -> io::Result<()> {
+        self.send_to_id(p.id as i32, m)
     }
 
     fn recv(&mut self) -> io::Result<Message> {
@@ -118,7 +122,7 @@ impl Connector for RelayConnector {
     }
 
     fn broadcast(&mut self, _: &[Peer], m: Message) -> io::Result<()> {
-        let broadcast_peer = Peer::broadcast_peer();
-        self.send_to(&broadcast_peer, m)
+        // we use `id` -1 to tell the server to broadcast
+        self.send_to_id(-1, m)
     }
 }

@@ -57,9 +57,4 @@ impl Peer {
             ek,
         }
     }
-
-    /// Create a *broadcast peer* - a `Peer` object representing all the peers together.
-    pub fn broadcast_peer() -> Peer {
-        Peer::default()
-    }
 }
