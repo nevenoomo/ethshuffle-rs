@@ -68,7 +68,14 @@ async fn async_main(ip: IpAddr, p: u16, n: u16) -> io::Result<()> {
             }
 
             // now we need to broadcast the received key announcement to all other clients
-            broadcast(clients_wr_temp.iter_mut(), item.freeze()).await?;
+            broadcast(
+                clients_wr_temp
+                    .iter_mut()
+                    .enumerate()
+                    .filter_map(|(id, cl)| if id != r_msg.from_id as usize { Some(cl) } else { None }),
+                item.freeze(),
+            )
+            .await?;
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
