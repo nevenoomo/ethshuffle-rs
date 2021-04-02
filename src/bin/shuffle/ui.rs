@@ -71,5 +71,12 @@ pub fn parse_cli_args<'a>() -> ArgMatches<'a> {
                 .required_unless("tui")
                 .takes_value(true)
                 .value_name("SESSION_ID")
+        )
+        .arg(
+            Arg::with_name("abi")
+                .help("path to custom contract abi to be used")
+                .long("abi")
+                .takes_value(true)
+                .value_name("PATH_TO_ABI")
         ).get_matches()
 }

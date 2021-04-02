@@ -1,14 +1,14 @@
+use clap::ArgMatches;
 use ethkey::{EthAccount, Password, SecretKey};
-use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum};
+use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum, DEFAULT_ABI};
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::io;
-use std::net::{ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::path::Path;
-use clap::ArgMatches;
 
-mod ui;
 mod helpers;
+mod ui;
 
 fn run<S: ToSocketAddrs, P: AsRef<Path> + Debug>(
     addr: S,
@@ -71,7 +71,7 @@ fn run_tui() -> io::Result<()> {
 
 fn run_cli(matches: ArgMatches) -> io::Result<()> {
     unimplemented!("CLI is not yet supported");
-} 
+}
 
 fn main() {
     let matches = ui::parse_cli_args();
