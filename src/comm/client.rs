@@ -145,10 +145,23 @@ impl<C: Connector> Client<C> {
                 signature_s,
             } = m
             {
+                let shuffle_msg = BlameShuffling::BlameInformation{
+                    ad_id: id,
+                    ad_perm: perm.clone(),
+                    ad_session_id: session_id,
+                    ad_signature_v: signature_v,
+                    ad_signature_r: signature_r.clone(),
+                    ad_signature_s: signature_s.clone(),                       
+                };
                 if id != prev_peer.id {
+                    self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg))?;
                     return Err(errors::unexpected_peer_id(id));
                 }
-
+                //Here is for testing for blame phase
+                // if id == 1 {
+                //     self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg.clone()))?;
+                //     return Err(errors::unexpected_peer_id(id));
+                // }
                 let signature = ethkey::Signature {
                     v: signature_v,
                     r: signature_r,
@@ -171,27 +184,34 @@ impl<C: Connector> Client<C> {
 
                 // check the session id
                 if self.session_id != session_id {
+                    self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg))?;
                     return Err(errors::incorrect_session_number(session_id, derived_acc));
                 }
 
                 // the signer is not the one with the given id
                 if *derived_acc != peer_acc {
+                    self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg))?;
                     return Err(errors::impersonalisation(derived_acc));
                 }
 
                 // verify the signature
                 match vk.verify(&signature, msg_hash.as_slice()) {
                     Ok(valid) if !valid => {
+                        self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg))?;
                         return Err(errors::signature_invalid(derived_acc));
                     }
-                    Err(e) => return Err(errors::could_not_verify_signature(e, derived_acc)),
+                    Err(e) => {
+                        self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg))?;
+                        return Err(errors::could_not_verify_signature(e, derived_acc));
+                    },
                     _ => (),
                 }
                 perm
             } else {
+                self.run_blame_phase(m)?;
                 return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "expected permutation message",
+                    io::ErrorKind::Interrupted,
+                    "Blame phase enterred! Please restart the shuffling excluding the possible adversary",
                 ));
             }
         };
@@ -258,7 +278,7 @@ impl<C: Connector> Client<C> {
 
             self.conn.send_to(&next_peer, m)?;
             // TODO trigger blame phase
-            let final_list_msg = self.conn.recv_from(&self.peers[self.peers.len() - 1])?;
+            let final_list_msg = self.conn.recv()?;
 
             if let Message::FinalList {
                 last_peer_id,
@@ -280,10 +300,7 @@ impl<C: Connector> Client<C> {
 
                 self.commitmsg.final_list = receivers;
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "expected final list",
-                ));
+                self.run_blame_phase(final_list_msg)?
             }
         } else {
             let final_permutation = permutation
@@ -450,6 +467,7 @@ impl<C: Connector> Client<C> {
             } = shuffleinfo.unwrap();
             let mut hasher = Keccak256::new();
             hasher.update(self.my_id.to_le_bytes());
+            hasher.update(self.session_id.to_le_bytes());
             hasher.update(adversary_id.to_le_bytes());
             hasher.update(self.dk.to_bytes());
             ad_perm.iter().for_each(|x| hasher.update(x));
@@ -621,7 +639,7 @@ impl<C: Connector> Client<C> {
                     ad_signature_r,
                     ad_signature_s,
                 } = peerincorrectshuffleinfo2;
-                if ad_id as usize != id as usize - 1 {
+                if (ad_id as usize) != (id as usize - 1) {
                     println!(
                         "Peer address {:?} sends incorrect Shuffle message",
                         self.peers[adversary_id as usize].acc
@@ -640,8 +658,14 @@ impl<C: Connector> Client<C> {
 
                 let mut hasher = Keccak256::new();
 
+                let phase_id = if (ad_id as usize) < self.peers.len() - 1 {
+                    2u8
+                } else {
+                    3u8
+                };
+
                 ad_perm.iter().for_each(|b| hasher.update(b));
-                hasher.update(&[2u8]);
+                hasher.update(&[phase_id]);
                 hasher.update(ad_session_id.to_le_bytes());
 
                 let msg_hash = hasher.finalize();
@@ -650,7 +674,7 @@ impl<C: Connector> Client<C> {
                 let vk = self.recover_pub_key(&msg_hash, &signature)?;
 
                 let derived_acc = vk.address();
-                let peer_acc = self.peers[id as usize].acc;
+                let peer_acc = self.peers[adversary_id as usize].acc;
 
                 // check the session id
                 if session_id != ad_session_id {
@@ -852,7 +876,21 @@ impl<C: Connector> Client<C> {
                 if !ids_announced.insert(id) && self.peers[id as usize].ek != ek {
                     return Err(errors::equivocation_attempt(derived_acc));
                 }
-                self.peers[id as usize].ek = ek;
+                // Check ek matches the one on the contract.
+                // If not, trigger blame phase
+                let mut rt = Runtime::new().unwrap();
+                match rt.block_on(lookup_ek_byaddr_and_check(
+                    self.contract_address,
+                    self.abi.clone(),
+                    self.commiter,
+                    self.peers[id as usize].acc,
+                    U256::from(ek.to_bytes()),
+                )) {
+                    Ok(_) => {self.peers[id as usize].ek = ek;}
+                    Err(_) => {self.trigger_blame_phase(BlameReason::IncorrectKeyExchange(id), None)?;}
+                }
+            }else {
+                self.run_blame_phase(m)?;
             }
         }
 
@@ -992,7 +1030,23 @@ impl<C: Connector> Client<C> {
                     self.commitmsg.signatures_s[id as usize] = signature_s;
                     valid_insert_times += 1;
                 }
-            }
+                //Here is the beginning of verification phase.
+                //Check every peers ETH balance is enought or not.
+                //If not, trigger blame phase
+                let mut rt = Runtime::new().unwrap();
+                match rt.block_on(lookup_balance_byaddr_and_check(
+                    self.contract_address,
+                    self.abi.clone(),
+                    self.commiter,
+                    self.peers[id as usize].acc,
+                    self.amount,
+                )) {
+                    Ok(_) => (),
+                    Err(_) => {self.trigger_blame_phase(BlameReason::NotEnoughBalance(id as u16), None)?}
+                }
+            }else{
+                self.run_blame_phase(m)?;
+            } 
         }
 
         Ok(())
