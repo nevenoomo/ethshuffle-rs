@@ -10,10 +10,10 @@ pub fn parse_eth_addr(s: &str) -> io::Result<AccountNum> {
     if s.len() != 42 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("number of bytes in account is invalid: {}, expected input format: 0x????????????????????", s),
+            format!("number of bytes in account is invalid: {}, expected input format: 0x????????????????????????????????????????", s),
         ));
     }
-
+    
     let s = &s[2..];
 
     let res_vec: Vec<u8> = s.from_hex().map_err(|e| {
@@ -46,8 +46,8 @@ pub fn parse_secret_key(s: &str) -> io::Result<SecretKey> {
             format!("number of bytes in secret key is invalid: {}, expected input format: 0x????????????????????", s),
         ));
     }
-    
-    let s = &s[2..];    
+
+    let s = &s[2..];
 
     let res_vec: Vec<u8> = s.from_hex().map_err(|e| {
         io::Error::new(
@@ -64,6 +64,7 @@ pub fn parse_secret_key(s: &str) -> io::Result<SecretKey> {
     })
 }
 
+// the input array should be sorted
 pub fn choose_commiter(accs: &[AccountNum], seed: u64) -> &AccountNum {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let commiter_idx: usize = rng.gen_range(0, accs.len());

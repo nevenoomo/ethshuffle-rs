@@ -78,10 +78,12 @@ fn run_cli(matches: ArgMatches) -> io::Result<()> {
     })?;
     let accounts_reader = io::BufReader::new(accounts_file);
 
-    let accounts = accounts_reader
+    let mut accounts = accounts_reader
         .lines()
         .map(|l| helpers::parse_eth_addr(&l.unwrap()))
         .collect::<io::Result<Vec<AccountNum>>>()?;
+
+    accounts.sort();
 
     let this_account = helpers::get_client_account(&accounts)?.clone();
     let keystore_filename = matches.value_of("keystore").unwrap();
@@ -117,7 +119,15 @@ fn run_cli(matches: ArgMatches) -> io::Result<()> {
         .parse::<u64>()
         .unwrap();
 
-    let commiter = helpers::choose_commiter(&accounts, session_id).clone();
+    // let commiter = helpers::choose_commiter(&accounts, session_id).clone();
+    let commiter =
+        helpers::parse_eth_addr(matches.value_of("commiter_addr").unwrap()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("the commiter address is invalid: {}", e),
+            )
+        })?;
+
     let abi = if matches.is_present("abi") {
         read_to_string(matches.value_of("abi").unwrap()).map_err(|e| {
             io::Error::new(

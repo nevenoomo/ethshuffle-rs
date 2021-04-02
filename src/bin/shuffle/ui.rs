@@ -123,5 +123,16 @@ pub fn parse_cli_args<'a>() -> ArgMatches<'a> {
                 .long("abi")
                 .takes_value(true)
                 .value_name("PATH_TO_ABI")
-        ).get_matches()
+        )
+        .arg(
+            // FIXME remove
+            Arg::with_name("commiter_addr")
+                .display_order(9)
+                .help("Ethereum address of the one peer supposed to commit the final transaction.")
+                .long("commiter")
+                .takes_value(true)
+                .required_unless("TUI")
+                .value_name("COMMITER_ADDR")
+        )
+        .get_matches()
 }
