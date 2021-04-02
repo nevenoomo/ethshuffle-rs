@@ -35,7 +35,7 @@ pub struct Client<C> {
     // all the peers taking part in the protocol
     peers: Vec<Peer>,
     dk: ecies::SecretKey,
-    sk: ethkey::SecretKey,
+    sk: ethsign::SecretKey,
     // The commiter who commit the transaction: the hoster
     commiter: AccountNum,
     // Contract address
@@ -60,7 +60,7 @@ impl<C: Connector> Client<C> {
         session_id: u64,
         mut peer_accounts: Vec<&'a AccountNum>,
         my_account: &'b AccountNum,
-        sk: ethkey::SecretKey,
+        sk: ethsign::SecretKey,
         commiter: AccountNum,
         contract_address: AccountNum,
         abi: String,
@@ -162,7 +162,8 @@ impl<C: Connector> Client<C> {
                 //     self.trigger_blame_phase(BlameReason::IncorrectShuffling(id as u16), Some(shuffle_msg.clone()))?;
                 //     return Err(errors::unexpected_peer_id(id));
                 // }
-                let signature = ethkey::Signature {
+
+                let signature = ethsign::Signature {
                     v: signature_v,
                     r: signature_r,
                     s: signature_s,
@@ -255,7 +256,7 @@ impl<C: Connector> Client<C> {
         hasher.update(self.session_id.to_le_bytes());
 
         let msg_hash = hasher.finalize();
-        let ethkey::Signature {
+        let ethsign::Signature {
             r: signature_r,
             s: signature_s,
             v: signature_v,
@@ -341,7 +342,7 @@ impl<C: Connector> Client<C> {
             return Err(errors::unexpected_peer_id(id));
         }
 
-        let signature = ethkey::Signature {
+        let signature = ethsign::Signature {
             v: signature_v,
             r: *signature_r,
             s: *signature_s,
@@ -389,7 +390,7 @@ impl<C: Connector> Client<C> {
             hasher.update(self.session_id.to_le_bytes());
             hasher.update(adversary_id.to_le_bytes());
             let hash = hasher.finalize();
-            let ethkey::Signature {
+            let ethsign::Signature {
                 r: signature_r,
                 s: signature_s,
                 v: signature_v,
@@ -425,7 +426,7 @@ impl<C: Connector> Client<C> {
             hasher.update(self.session_id.to_le_bytes());
             hasher.update(adversary_id.to_le_bytes());
             let hash = hasher.finalize();
-            let ethkey::Signature {
+            let ethsign::Signature {
                 r: signature_r,
                 s: signature_s,
                 v: signature_v,
@@ -476,7 +477,7 @@ impl<C: Connector> Client<C> {
             hasher.update(ad_signature_r);
             hasher.update(ad_signature_s);
             let hash = hasher.finalize();
-            let ethkey::Signature {
+            let ethsign::Signature {
                 r: signature_r,
                 s: signature_s,
                 v: signature_v,
@@ -538,7 +539,7 @@ impl<C: Connector> Client<C> {
                 return Err(errors::unexpected_peer_id(id));
             }
 
-            let signature = ethkey::Signature {
+            let signature = ethsign::Signature {
                 r: signature_r,
                 s: signature_s,
                 v: signature_v,
@@ -650,7 +651,7 @@ impl<C: Connector> Client<C> {
                     ));
                 }
 
-                let signature = ethkey::Signature {
+                let signature = ethsign::Signature {
                     v: ad_signature_v,
                     r: ad_signature_r,
                     s: ad_signature_s,
@@ -773,7 +774,7 @@ impl<C: Connector> Client<C> {
 
         let hash = hasher.finalize();
 
-        let ethkey::Signature {
+        let ethsign::Signature {
             r: signature_r,
             s: signature_s,
             v: signature_v,
@@ -797,8 +798,8 @@ impl<C: Connector> Client<C> {
     fn recover_pub_key<U: generic_array::ArrayLength<u8>>(
         &self,
         hashed_msg: &generic_array::GenericArray<u8, U>,
-        signature: &ethkey::Signature,
-    ) -> io::Result<ethkey::PublicKey> {
+        signature: &ethsign::Signature,
+    ) -> io::Result<ethsign::PublicKey> {
         signature.recover(hashed_msg.as_slice()).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -832,7 +833,7 @@ impl<C: Connector> Client<C> {
                     return Err(errors::unexpected_peer_id(id));
                 }
 
-                let signature = ethkey::Signature {
+                let signature = ethsign::Signature {
                     r: signature_r,
                     s: signature_s,
                     v: signature_v,
@@ -911,7 +912,7 @@ impl<C: Connector> Client<C> {
         hasher.update(self.amount.to_be_bytes());
         let hash = hasher.finalize();
 
-        let ethkey::prelude::Signature {
+        let ethsign::Signature {
             r: signature_r,
             s: signature_s,
             v: signature_v,
@@ -963,7 +964,7 @@ impl<C: Connector> Client<C> {
                     return Err(errors::unexpected_peer_id(id));
                 }
 
-                let signature = ethkey::prelude::Signature {
+                let signature = ethsign::Signature {
                     r: signature_r,
                     s: signature_s,
                     v: signature_v,
@@ -1104,7 +1105,7 @@ impl<C: Connector> Client<C> {
 fn first_client_test() {
     use super::{net::RelayConnector, peers::AccountNum};
     use std::net::{SocketAddr};
-    use ethkey::{SecretKey};
+    use ethsign::{SecretKey};
     use super::funccall::{check_receiver_balance};
     let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
     let conn = RelayConnector::new(addr).unwrap();
@@ -1161,7 +1162,7 @@ fn first_client_test() {
 fn second_client_test() {
     use super::{net::RelayConnector, peers::AccountNum};
     use std::net::{SocketAddr};
-    use ethkey::{SecretKey};
+    use ethsign::{SecretKey};
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
     let conn = RelayConnector::new(addr).unwrap();
@@ -1211,7 +1212,7 @@ fn second_client_test() {
 fn third_client_test() {
     use super::{net::RelayConnector, peers::AccountNum};
     use std::net::{SocketAddr};
-    use ethkey::{SecretKey};
+    use ethsign::{SecretKey};
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 5000));
     let conn = RelayConnector::new(addr).unwrap();
