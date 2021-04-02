@@ -662,6 +662,8 @@ dependencies = [
  "hex",
  "hex-literal",
  "rand 0.7.3",
+ "rand_chacha 0.2.2",
+ "rustc-hex",
  "serde",
  "sha3",
  "tokio 0.2.25",
