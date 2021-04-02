@@ -299,7 +299,7 @@ pub async fn transferfunc(
     senders: Vec<[u8;20]>,
     receivers: Vec<[u8;20]>,
     noofclaimers: u128,
-    amount: U256,
+    amount: u32,
     v: Vec<u8>,
     r: Vec<U256>,
     s: Vec<U256>,
@@ -423,8 +423,8 @@ fn register_test() {
         ],
 
         2_u128,
-        U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
-
+        //U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]),
+        0xff_u32,
         vec![1_u8, 2_u8],
         vec![U256([0x00_u64,0xFF_u64,0xFF_u64,0xFF_u64]), U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64])],
         vec![U256([0xFF_u64,0x00_u64,0x00_u64,0x00_u64]), U256([0x00_u64,0xFF_u64,0xFF_u64,0xFF_u64])],

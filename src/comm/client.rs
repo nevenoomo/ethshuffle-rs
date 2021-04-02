@@ -87,15 +87,15 @@ impl<C: Connector> Client<C> {
         let (dk, ek) = ecies::generate_keypair(&mut rng);
 
         //update ek to contract
-        // let mut rt = Runtime::new().unwrap();
-        // rt.block_on(updateek(
-        //     *my_account,
-        //     contract_address,
-        //     abi.clone(),
-        //     commiter,
-        //     U256::from(ek.to_bytes()),
-        // ))
-        // .unwrap();        
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(updateek(
+            *my_account,
+            contract_address,
+            abi.clone(),
+            commiter,
+            U256::from(ek.to_bytes()),
+        ))
+        .unwrap();        
 
         peers[my_id as usize].ek = ek;
         conn.set_id(my_id);
@@ -222,8 +222,6 @@ impl<C: Connector> Client<C> {
 
         permutation.shuffle(&mut rng);
 
-        let next_peer = &self.peers[self.my_id as usize + 1];
-
         let mut hasher = Keccak256::new();
 
         permutation.iter().for_each(|x| hasher.update(x));
@@ -248,6 +246,7 @@ impl<C: Connector> Client<C> {
 
         // if I am not the last peer
         if (self.my_id as usize) < self.peers.len() - 1 {
+            let next_peer = &self.peers[self.my_id as usize + 1];
             let m = Message::Permutation {
                 id: self.my_id,
                 perm: permutation,
@@ -295,9 +294,9 @@ impl<C: Connector> Client<C> {
                 .map_err(|_| errors::corrupted_final_permutation())?;
             self.commitmsg.final_list = final_permutation.clone();
             let final_list = Message::FinalList {
-                receivers: final_permutation,
                 last_peer_session_id: self.session_id,
                 last_peer_id: self.my_id,
+                receivers: final_permutation.clone(),
                 signature_v,
                 signature_r,
                 signature_s,
@@ -334,7 +333,7 @@ impl<C: Connector> Client<C> {
         let mut hasher = Keccak256::new();
 
         receivers.iter().for_each(|b| hasher.update(b));
-        hasher.update(&[2u8]);
+        hasher.update(&[3u8]);
         hasher.update(session_id.to_le_bytes());
 
         let msg_hash = hasher.finalize();
@@ -864,18 +863,17 @@ impl<C: Connector> Client<C> {
         let senders: Vec<AccountNum> = self.peers.iter().map(|p| p.acc).collect();
         let receivers = self.commitmsg.final_list.clone();
         let no_of_claimers = self.peers.len() as u16;
-        hasher.update(self.my_id.to_le_bytes());
         for i in &senders {
             hasher.update(i);
         }
         for i in &receivers {
             hasher.update(i);
         }
-        hasher.update(no_of_claimers.to_le_bytes());
-        hasher.update(self.amount.to_le_bytes());
+        hasher.update(no_of_claimers.to_be_bytes());
+        hasher.update(self.amount.to_be_bytes());
         let hash = hasher.finalize();
 
-        let ethkey::Signature {
+        let ethkey::prelude::Signature {
             r: signature_r,
             s: signature_s,
             v: signature_v,
@@ -907,7 +905,7 @@ impl<C: Connector> Client<C> {
     fn receive_commitmsg(&mut self) -> io::Result<()> {
         let n = self.peers.len();
         let mut valid_insert_times = 0;
-        while valid_insert_times < n {
+        while valid_insert_times < n - 1 {
             // TODO add timeout on waiting
             let m = self.conn.recv()?;
 
@@ -927,7 +925,7 @@ impl<C: Connector> Client<C> {
                     return Err(errors::unexpected_peer_id(id));
                 }
 
-                let signature = ethkey::Signature {
+                let signature = ethkey::prelude::Signature {
                     r: signature_r,
                     s: signature_s,
                     v: signature_v,
@@ -935,15 +933,14 @@ impl<C: Connector> Client<C> {
 
                 let mut hasher = Keccak256::new();
 
-                hasher.update(id.to_le_bytes());
                 for i in &senders {
                     hasher.update(i);
                 }
                 for i in &receivers {
                     hasher.update(i);
                 }
-                hasher.update(no_of_claimers.to_le_bytes());
-                hasher.update(amount.to_le_bytes());
+                hasher.update(no_of_claimers.to_be_bytes());
+                hasher.update(amount.to_be_bytes());
 
                 let hashed_msg = hasher.finalize();
                 // recover the signer
@@ -1007,43 +1004,44 @@ impl<C: Connector> Client<C> {
         contract_address: AccountNum,
         abi: String,
     ) -> io::Result<()> {
-        assert_ne!(
-            self.peers[self.my_id as usize].acc, commiter,
-            "You're not the correct account number to commit the block!"
-        );
-        let senders: Vec<[u8; 20]> = self.peers.iter().map(|i| i.acc).collect();
-        let receivers: Vec<[u8; 20]> = self.commitmsg.final_list.clone();
-        let noofclaimers = self.commitmsg.final_list.len() as u128;
-        let amount = U256::from(self.amount);
-        let v: Vec<u8> = self.commitmsg.signatures_v.clone();
-        let r: Vec<U256> = self
-            .commitmsg
-            .signatures_r
-            .clone()
-            .iter()
-            .map(|i| U256::from(i))
-            .collect();
-        let s: Vec<U256> = self
-            .commitmsg
-            .signatures_s
-            .clone()
-            .iter()
-            .map(|i| U256::from(i))
-            .collect();
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(transferfunc(
-            commiter,
-            contract_address,
-            abi,
-            senders,
-            receivers,
-            noofclaimers,
-            amount,
-            v,
-            r,
-            s,
-        ))
-        .unwrap();
+        let matching = self.peers[self.my_id as usize].acc.iter().zip(commiter.iter()).filter(|&(a, b)| a == b).count();
+        if matching == self.peers[self.my_id as usize].acc.len() && matching == commiter.len() {
+            let senders: Vec<[u8; 20]> = self.peers.iter().map(|i| i.acc).collect();
+            let receivers: Vec<[u8; 20]> = self.commitmsg.final_list.clone();
+            let noofclaimers = self.commitmsg.final_list.len() as u128;
+            let amount = self.amount;
+            let v: Vec<u8> = self.commitmsg.signatures_v.clone();
+            let r: Vec<U256> = self
+                .commitmsg
+                .signatures_r
+                .clone()
+                .iter()
+                .map(|i| U256::from_big_endian(i))
+                .collect();
+            let s: Vec<U256> = self
+                .commitmsg
+                .signatures_s
+                .clone()
+                .iter()
+                .map(|i| U256::from_big_endian(i))
+                .collect();
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(transferfunc(
+                commiter,
+                contract_address,
+                abi,
+                senders,
+                receivers,
+                noofclaimers,
+                amount,
+                v,
+                r,
+                s,
+            ))
+            .unwrap();
+        }else{
+            println!("Wait hoster to send the final transaction...");
+        }
         Ok(())
     }
 }
@@ -1070,32 +1068,33 @@ fn first_client_test() {
     );
 
     client.run_announcement_phase().unwrap();
-
-    // let acc = EthAccount::load_or_generate(output_path.as_ref(), output_passwd).map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!(
-    //             "could not use keystore {:?} as and output: {}",
-    //             output_path, e
-    //         ),
-    //     )
-    // })?;
-
-    // let addr: AccountNum = acc.address().to_vec().try_into().unwrap();
-    // let addr: AccountNum = [0x9D,0x4c,0x42,0xcd,0xE9,0x74,0xA2,0xdF,0x22,0xDF,0x71,0x03,0xB7,0x46,0x9f,0xdb,0x28,0xe0,0x06,0xA6];
-    // client.run_shuffle_phase(&addr).map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!("shuffling phase failed: {}", e),
-    //     )
-    // })?;
-    // client.verification_phase().map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!("verification phase failed: {}", e),
-    //     )
-    // })?;
+    for i in 0..client.peers.len() {
+        println!("peer ek: {:?}", client.peers[i].ek.to_bytes());
+    }
+    let recvaddr: AccountNum = [0xc5,0x57,0xB5,0x3C,0xAa,0x46,0xc9,0xaA,0xE2,0x32,0x12,0x94,0xF0,0x69,0x59,0xCb,0xa7,0xe1,0x85,0x52];
+    client.run_shuffle_phase(&recvaddr).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("shuffling phase failed: {}", e),
+        )
+    }).unwrap();
+    println!("final list is : {:?}", client.commitmsg.final_list.clone());
+    client.verification_phase().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("verification phase failed: {}", e),
+        )
+    }).unwrap();
+    println!("After verification: final list is : {:?}\n v: {:?}\n r: {:?}\n s: {:?}", 
+            client.commitmsg.final_list.clone(),
+            client.commitmsg.signatures_v.clone(),
+            client.commitmsg.signatures_r.clone(),
+            client.commitmsg.signatures_s.clone(),);
+    for i in 0..client.peers.len() {
+        println!("sender {}: {:?}",i, client.peers[i].acc);
+    }
 }
+
 #[test]
 fn second_client_test() {
     use super::{net::RelayConnector, peers::AccountNum};
@@ -1118,29 +1117,29 @@ fn second_client_test() {
     );
 
     client.run_announcement_phase().unwrap();
-
-    // let acc = EthAccount::load_or_generate(output_path.as_ref(), output_passwd).map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!(
-    //             "could not use keystore {:?} as and output: {}",
-    //             output_path, e
-    //         ),
-    //     )
-    // })?;
-
-    // let addr: AccountNum = acc.address().to_vec().try_into().unwrap();
-    // let addr: AccountNum = [0x9D,0x4c,0x42,0xcd,0xE9,0x74,0xA2,0xdF,0x22,0xDF,0x71,0x03,0xB7,0x46,0x9f,0xdb,0x28,0xe0,0x06,0xA6];
-    // client.run_shuffle_phase(&addr).map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!("shuffling phase failed: {}", e),
-    //     )
-    // })?;
-    // client.verification_phase().map_err(|e| {
-    //     io::Error::new(
-    //         io::ErrorKind::InvalidInput,
-    //         format!("verification phase failed: {}", e),
-    //     )
-    // })?;
+    for i in 0..client.peers.len() {
+        println!("peer ek: {:?}", client.peers[i].ek.to_bytes());
+    }
+    let recvaddr: AccountNum = [0x9D,0x4c,0x42,0xcd,0xE9,0x74,0xA2,0xdF,0x22,0xDF,0x71,0x03,0xB7,0x46,0x9f,0xdb,0x28,0xe0,0x06,0xA6];
+    client.run_shuffle_phase(&recvaddr).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("shuffling phase failed: {}", e),
+        )
+    }).unwrap();
+    println!("final list is : {:?}", client.commitmsg.final_list.clone());
+    client.verification_phase().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("verification phase failed: {}", e),
+        )
+    }).unwrap();
+    println!("After verification: final list is : {:?}\n v: {:?}\n r: {:?}\n s: {:?}", 
+            client.commitmsg.final_list.clone(),
+            client.commitmsg.signatures_v.clone(),
+            client.commitmsg.signatures_r.clone(),
+            client.commitmsg.signatures_s.clone(),);
+    for i in 0..client.peers.len() {
+        println!("sender {}: {:?}",i, client.peers[i].acc);
+    }
 }

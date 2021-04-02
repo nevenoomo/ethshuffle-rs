@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use ecies_ed25519::{PublicKey};
 use super::peers::{AccountNum, AccountNumEnc};
-
+use std::fmt;
 /// Blame reasons
 #[derive(Clone, Serialize, Deserialize)]
 pub enum BlameReason {
@@ -80,7 +80,16 @@ pub enum Message {
         signature_s: [u8; 32],        
     }
 }
-
+impl fmt::Display for Message {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       match &*self {
+            Message::AnnounceEk { id, ek, session_id:_, signature_v:_, signature_r:_, signature_s:_, }=> write!(f, "AnnounceEk: id is {} ek is {:?}",id, ek.to_bytes()),
+            Message::Permutation  { id:_, perm:_, session_id:_, signature_v:_, signature_r:_, signature_s:_, }=> write!(f, "Permutation"),
+            Message::FinalList  { last_peer_id:_, last_peer_session_id:_, receivers:_, signature_v:_, signature_r:_, signature_s:_ }=> write!(f, "FinalList"),
+           _=> write!(f, "Others"),
+       }
+    }
+}
 /// Message intended to the relaying server. In addition to the general message format
 /// contains the identifier of the receiving party
 #[derive(Clone, Serialize, Deserialize)]
