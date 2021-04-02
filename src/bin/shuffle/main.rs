@@ -1,6 +1,6 @@
 use clap::ArgMatches;
 use ethkey::EthAccount;
-use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum, DEFAULT_ABI};
+use ethshuffle_rs::{client::Client, net::RelayConnector, peers::AccountNum};
 use ethsign::SecretKey;
 use std::convert::TryInto;
 use std::fs::{read_to_string, File};
@@ -84,9 +84,7 @@ fn run_cli(matches: ArgMatches) -> io::Result<()> {
         .collect::<io::Result<Vec<AccountNum>>>()?;
 
     let this_account = helpers::get_client_account(&accounts)?.clone();
-        
     accounts.sort();
-    
     let keystore_filename = matches.value_of("keystore").unwrap();
     let keystore_file = File::open(keystore_filename).map_err(|e| {
         io::Error::new(
@@ -129,16 +127,14 @@ fn run_cli(matches: ArgMatches) -> io::Result<()> {
             )
         })?;
 
-    let abi = if matches.is_present("abi") {
-        read_to_string(matches.value_of("abi").unwrap()).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("could not read the specified ABI file: {}", e),
-            )
-        })?
-    } else {
-        DEFAULT_ABI.to_string()
-    };
+    let abi = matches.value_of("abi").unwrap().to_string();
+
+    if !Path::new(&abi).exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("could not read the specified ABI file"),
+        ));
+    }
 
     let contract_addr = helpers::parse_eth_addr(&matches.value_of("contract_addr").unwrap())?;
     let output_path = matches.value_of("output_path").unwrap();

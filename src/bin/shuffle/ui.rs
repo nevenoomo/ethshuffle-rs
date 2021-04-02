@@ -122,6 +122,7 @@ pub fn parse_cli_args<'a>() -> ArgMatches<'a> {
                 .help("Path to custom contract abi to be used.")
                 .long("abi")
                 .takes_value(true)
+                .required_unless("tui")
                 .value_name("PATH_TO_ABI")
         )
         .arg(
