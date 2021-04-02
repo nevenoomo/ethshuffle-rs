@@ -83,9 +83,10 @@ fn run_cli(matches: ArgMatches) -> io::Result<()> {
         .map(|l| helpers::parse_eth_addr(&l.unwrap()))
         .collect::<io::Result<Vec<AccountNum>>>()?;
 
-    accounts.sort();
-
     let this_account = helpers::get_client_account(&accounts)?.clone();
+        
+    accounts.sort();
+    
     let keystore_filename = matches.value_of("keystore").unwrap();
     let keystore_file = File::open(keystore_filename).map_err(|e| {
         io::Error::new(
